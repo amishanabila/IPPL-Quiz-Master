@@ -1,14 +1,16 @@
 import React from "react";
-import Header1 from "../src/header/Header1";
+import Header from "./header/Header";
 import KumpulanMateri from "./materi/KumpulanMateri";
 import BannerBuatSoal from "./buat soal/BannerBuatSoal";
+import Footer from "./footer/Footer";
 
 export default function HalamanAwal() {
   return (
     <div>
-      <Header1/>
+      <Header/>
       <BannerBuatSoal/>
       <KumpulanMateri/>
+      <Footer/>
     </div>
   );
 }

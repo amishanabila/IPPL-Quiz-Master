@@ -16,6 +16,12 @@ export default function LupaPassword() {
     setError("");
     setLoading(true);
 
+    if (!email) {
+      setError("Email wajib diisi");
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await authService.requestPasswordReset(email);
       
@@ -53,7 +59,7 @@ export default function LupaPassword() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={loading}
-              className="border border-gray-300 rounded-md px-3 py-2 bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
+              className="border border-gray-300 rounded px-3 py-2 bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500"
             />
             {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
           </div>
@@ -70,7 +76,7 @@ export default function LupaPassword() {
         </form>
       </div>
 
-      {isSuccess && <ResetPasswordBerhasil onClose={() => navigate("/login")} />}
+      {isSuccess && <ResetPasswordBerhasil onClose={() => setIsSuccess(false)} />}
     </div>
   );
 }

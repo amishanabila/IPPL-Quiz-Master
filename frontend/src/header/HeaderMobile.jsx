@@ -1,9 +1,8 @@
-// src/header/Header1Mobile.jsx
+// src/header/HeaderMobile.jsx
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
-export default function Header1Mobile() {
-  const navigate = useNavigate();
+const HeaderMobile = ({ onLogout, user }) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -45,30 +44,46 @@ export default function Header1Mobile() {
       {/* Mobile Menu */}
       <div
         className={`absolute top-[100%] left-0 w-full bg-[#FFD580] shadow-md z-40 flex flex-col px-5 py-4 space-y-4 overflow-hidden transition-all duration-300 ease-in-out ${
-          isOpen ? "max-h-[400px] opacity-100" : "max-h-0 opacity-0"
+          isOpen ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0"
         }`}
       >
-        {/* Input PIN */}
-        <div className="flex flex-col gap-2">
-          <span className="font-bold">Join Game? Enter PIN:</span>
-          <input
-            type="text"
-            placeholder="123 456"
-            className="border-2 border-black rounded-full px-4 py-2 text-center text-lg font-semibold outline-none"
+
+        {/* Akun Section */}
+        <div className="flex items-center gap-2 rounded-full overflow-hidden border-2 border-black p-2 bg-[#FFB347]">
+          <img
+            src={user?.foto || "/icon/default-avatar.png"}
+            alt={user?.nama || 'pengguna'}
+            className="w-6 h-6 rounded-full object-cover"
           />
+          <span className="text-sm font-bold text-black">{user?.nama || 'User'}</span>
         </div>
 
-        {/* Tombol Masuk */}
-        <button
-          className="bg-[#FFB347] border-2 border-black px-4 py-2 rounded-full font-bold shadow hover:bg-orange-700 hover:text-white transition w-full"
-          onClick={() => {
-            setIsOpen(false);
-            navigate("/login");
-          }}
+        {/* Links */}
+        <Link
+          to="/pengaturan-akun"
+          className="group flex items-center gap-2 hover:bg-orange-700 p-2 rounded transition"
+          onClick={() => setIsOpen(false)}
         >
-          Masuk
+          <span className="text-sm font-semibold text-black group-hover:text-white">
+            Pengaturan Akun
+          </span>
+        </Link>
+
+        {/* Logout */}
+        <button
+          onClick={() => {
+            if (onLogout) onLogout();
+            setIsOpen(false);
+          }}
+          className="group flex items-center gap-2 hover:bg-orange-700 p-2 rounded transition"
+        >
+          <span className="text-sm font-semibold text-black group-hover:text-white">
+            Keluar
+          </span>
         </button>
       </div>
     </div>
   );
-}
+};
+
+export default HeaderMobile;

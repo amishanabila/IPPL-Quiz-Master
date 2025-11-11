@@ -22,7 +22,7 @@ export default function Register() {
   const validateEmail = (email) => /^[a-z0-9._%+-]+@gmail\.com$/.test(email);
   const validateName = (name) => /^(?=.*[a-z])(?=.*[A-Z])[A-Za-z\s]+$/.test(name);
   const validatePassword = (password) =>
-    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d])[\S]{8,12}$/.test(password);
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?])[A-Za-z\d!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]{8,12}$/.test(password);
 
   // Handle input change
   const handleInputChange = (e) => {
@@ -50,7 +50,7 @@ export default function Register() {
 
     if (!password) newErrors.password = "Password wajib diisi";
     else if (!validatePassword(password)) newErrors.password =
-      "Password harus 8–12 karakter, huruf besar & kecil, angka & simbol";
+      "Password harus 8–12 karakter, huruf besar & kecil, angka & simbol (!@#$%^&*()_+-=[]{};\\':\"|,.<>/?)";
 
     if (!konfirmasi) newErrors.konfirmasi = "Konfirmasi Password wajib diisi";
     else if (password !== konfirmasi) newErrors.konfirmasi = "Konfirmasi Password tidak sesuai";
@@ -116,7 +116,7 @@ export default function Register() {
               value={formData.email}
               onChange={handleInputChange}
               disabled={loading}
-              className={`border rounded-md px-3 py-2 bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
+              className={`border rounded px-3 py-2 bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
                 errors.email ? "border-red-500 focus:ring-red-500 focus:border-red-500" : "border-gray-300"
               }`}
             />
@@ -134,7 +134,7 @@ export default function Register() {
               value={formData.nama}
               onChange={handleInputChange}
               disabled={loading}
-              className={`border rounded-md px-3 py-2 bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
+              className={`border rounded px-3 py-2 bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
                 errors.nama ? "border-red-500 focus:ring-red-500 focus:border-red-500" : "border-gray-300"
               }`}
             />
@@ -153,7 +153,7 @@ export default function Register() {
                 value={formData.password}
                 onChange={handleInputChange}
                 disabled={loading}
-                className={`w-full border rounded-md px-3 py-2 bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 pr-10 ${
+                className={`w-full border rounded px-3 py-2 bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 pr-10 ${
                   errors.password ? "border-red-500 focus:ring-red-500 focus:border-red-500" : "border-gray-300"
                 }`}
               />
@@ -181,7 +181,7 @@ export default function Register() {
                 value={formData.konfirmasi}
                 onChange={handleInputChange}
                 disabled={loading}
-                className={`w-full border rounded-md px-3 py-2 bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 pr-10 ${
+                className={`w-full border rounded px-3 py-2 bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 pr-10 ${
                   errors.konfirmasi ? "border-red-500 focus:ring-red-500 focus:border-red-500" : "border-gray-300"
                 }`}
               />
