@@ -4,7 +4,23 @@ import { Link } from "react-router-dom";
 
 const HeaderMobile = ({ onLogout, user }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState(user);
   const menuRef = useRef(null);
+
+  // Update currentUser ketika user prop berubah
+  useEffect(() => {
+    setCurrentUser(user);
+  }, [user]);
+
+  // Listen untuk profile updates
+  useEffect(() => {
+    const handleProfileUpdate = (e) => {
+      const updatedUser = e.detail;
+      setCurrentUser(updatedUser);
+    };
+    window.addEventListener("profileUpdated", handleProfileUpdate);
+    return () => window.removeEventListener("profileUpdated", handleProfileUpdate);
+  }, []);
 
   // Tutup menu jika klik di luar
   useEffect(() => {
@@ -21,7 +37,7 @@ const HeaderMobile = ({ onLogout, user }) => {
     <div ref={menuRef} className="md:hidden">
       {/* Tombol Hamburger */}
       <button
-        className="flex flex-col justify-center items-center w-10 h-10 relative z-50"
+        className="flex flex-col justify-center items-center w-10 h-10 relative z-[100]"
         onClick={() => setIsOpen(!isOpen)}
       >
         <span
@@ -43,7 +59,7 @@ const HeaderMobile = ({ onLogout, user }) => {
 
       {/* Mobile Menu */}
       <div
-        className={`absolute top-[100%] left-0 w-full bg-[#FFD580] shadow-md z-40 flex flex-col px-5 py-4 space-y-4 overflow-hidden transition-all duration-300 ease-in-out ${
+        className={`absolute top-[100%] left-0 w-full bg-[#FFD580] shadow-md z-[90] flex flex-col px-5 py-4 space-y-4 overflow-hidden transition-all duration-300 ease-in-out ${
           isOpen ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0"
         }`}
       >
@@ -51,16 +67,16 @@ const HeaderMobile = ({ onLogout, user }) => {
         {/* Akun Section */}
         <div className="flex items-center gap-2 rounded-full overflow-hidden border-2 border-black p-2 bg-[#FFB347]">
           <img
-            src={user?.foto || "/icon/default-avatar.png"}
-            alt={user?.nama || 'pengguna'}
+            src={currentUser?.foto || "icon/user.png"}
+            alt={currentUser?.nama || 'pengguna'}
             className="w-6 h-6 rounded-full object-cover"
           />
-          <span className="text-sm font-bold text-black">{user?.nama || 'User'}</span>
+          <span className="text-sm font-bold text-black">{currentUser?.nama || 'User'}</span>
         </div>
 
         {/* Links */}
         <Link
-          to="/pengaturan-akun"
+          to="/profil"
           className="group flex items-center gap-2 hover:bg-orange-700 p-2 rounded transition"
           onClick={() => setIsOpen(false)}
         >

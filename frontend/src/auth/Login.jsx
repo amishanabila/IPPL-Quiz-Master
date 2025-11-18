@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { authService } from '../services/authService';
 import { Eye, EyeOff, Loader2 } from "lucide-react";
@@ -12,6 +12,23 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
+
+  // Check if already logged in
+  useEffect(() => {
+    if (authService.isAuthenticated()) {
+      console.log("ℹ️ User sudah login, redirect ke halaman kreator");
+      navigate('/halaman-awal-kreator', { replace: true });
+    }
+  }, [navigate]);
+
+  // Cleanup timer saat component unmount
+  useEffect(() => {
+    return () => {
+      if (window.autoRedirectTimer) {
+        clearTimeout(window.autoRedirectTimer);
+      }
+    };
+  }, []);
 
   const togglePassword = () => setShowPassword(!showPassword);
 
@@ -44,18 +61,42 @@ export default function Login() {
     try {
       const response = await authService.login({ email, password });
       
-      if (response.status === 'success') {
+      console.log("📥 Response dari login:", response);
+      console.log("📥 Response status:", response?.status);
+      console.log("📥 Response success:", response?.success);
+      
+      if (response.status === 'success' || response.success) {
+        console.log("✅ Login berhasil, menampilkan popup");
+        
+        // Semua yang login dianggap sebagai kreator/pembuat soal
+        const destination = '/halaman-awal-kreator';
+        
+        console.log("🎯 Destination:", destination);
+        
         setShowPopup(true);
+        
+        // Auto redirect setelah 3 detik (sesuai countdown di popup)
+        const autoRedirectTimer = setTimeout(() => {
+          console.log("⏰ Auto redirect ke", destination);
+          navigate(destination, { replace: true });
+        }, 3000);
+        
+        // Store timer untuk dibersihkan saat user klik manual
+        window.autoRedirectTimer = autoRedirectTimer;
+        window.loginDestination = destination;
       } else {
+        console.error("❌ Login gagal:", response);
+        const errorMsg = response.message || response.error || "Email atau password salah";
         setErrors({
-          email: response.message,
-          password: response.message,
+          email: errorMsg,
+          password: errorMsg,
         });
       }
     } catch (err) {
+      console.error("❌ Error saat login:", err);
       setErrors({
-        email: err.message || "Terjadi kesalahan",
-        password: err.message || "Terjadi kesalahan",
+        email: err.message || "Terjadi kesalahan saat login",
+        password: err.message || "Terjadi kesalahan saat login",
       });
     } finally {
       setLoading(false);
@@ -73,87 +114,121 @@ export default function Login() {
   };
 
   const handlePopupClose = () => {
+    console.log("🔘 User klik Oke di popup");
+    
+    // Clear auto redirect timer
+    if (window.autoRedirectTimer) {
+      clearTimeout(window.autoRedirectTimer);
+    }
+    
     setShowPopup(false);
-    navigate("/halaman-awal"); // redirect setelah klik Oke
+    
+    // Get destination from stored value or determine from user data
+    const destination = window.loginDestination || '/halaman-awal-kreator';
+    
+    // Redirect immediately
+    console.log("➡️ Redirect ke", destination);
+    navigate(destination, { replace: true });
   };
 
   return (
-    <div className="relative flex items-center justify-center min-h-screen bg-yellow-200 p-4">
+    <div className="relative flex items-center justify-center min-h-screen bg-gradient-to-br from-yellow-300 via-yellow-200 to-orange-200 p-4 overflow-hidden">
+      {/* Animated Background Circles */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 left-10 w-64 h-64 bg-orange-300 rounded-full opacity-20 blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-20 right-10 w-80 h-80 bg-yellow-400 rounded-full opacity-20 blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
+        <div className="absolute top-1/2 left-1/3 w-72 h-72 bg-green-300 rounded-full opacity-15 blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+      </div>
+
       <div
-        className={`bg-yellow-50 p-6 sm:p-8 rounded-xl shadow-md w-full max-w-md z-50 ${
+        className={`relative bg-white/95 backdrop-blur-sm p-8 sm:p-10 rounded-3xl shadow-2xl w-full max-w-lg border-4 border-white/50 z-50 ${
           showPopup || loading ? "pointer-events-none opacity-70" : ""
         }`}
       >
-        <div className="flex justify-center mb-4">
-          <img
-            src="/logo.png"
-            alt="QuizMaster Logo"
-            className="h-[150px] w-[150px] sm:h-[150px] sm:w-[150px]"
-          />
+        <div className="flex justify-center mb-6">
+          <div className="relative">
+            <div className="absolute inset-0 bg-gradient-to-r from-orange-400 to-yellow-400 rounded-full blur-lg opacity-50"></div>
+            <img
+              src="/logo.png"
+              alt="QuizMaster Logo"
+              className="relative h-[150px] w-[150px] drop-shadow-2xl"
+            />
+          </div>
         </div>
-        <h1 className="text-2xl font-bold text-center mb-6">Masuk ke QuizMaster</h1>
+        <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-yellow-600 text-center mb-6">Masuk ke QuizMaster</h1>
 
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
           {/* Email */}
           <div className="flex flex-col">
-            <label htmlFor="email" className="mb-1 font-medium">Email</label>
+            <label htmlFor="email" className="mb-2 font-bold text-gray-700">Email</label>
             <input
               type="email"
               id="email"
-              placeholder="Email"
+              placeholder="email@gmail.com"
               value={email}
               onChange={handleEmailChange}
               disabled={loading}
-              className={`border rounded px-3 py-2 bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
-                errors.email ? "border-red-500 focus:ring-red-500 focus:border-red-500" : "border-gray-300"
+              className={`border-2 rounded-xl px-4 py-3 bg-gradient-to-br from-yellow-50 to-orange-50 focus:outline-none focus:ring-4 transition-all shadow-md ${
+                errors.email ? "border-red-500 focus:ring-red-300" : "border-orange-300 focus:ring-orange-200 focus:border-orange-500"
               }`}
             />
-            {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
+            {errors.email && (
+              <div className="mt-2 p-3 bg-red-50 border-2 border-red-200 rounded-xl flex items-start gap-2">
+                <span className="text-red-500 text-lg">⚠️</span>
+                <p className="text-red-600 text-sm font-semibold flex-1">{errors.email}</p>
+              </div>
+            )}
           </div>
 
           {/* Password */}
           <div className="flex flex-col">
-            <label htmlFor="password" className="mb-1 font-medium">Password</label>
+            <label htmlFor="password" className="mb-2 font-bold text-gray-700">Password</label>
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
                 id="password"
-                placeholder="Password"
+                placeholder="••••••••"
                 value={password}
                 onChange={handlePasswordChange}
                 disabled={loading}
-                className={`w-full border rounded px-3 py-2 bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 pr-10 ${
-                  errors.password ? "border-red-500 focus:ring-red-500 focus:border-red-500" : "border-gray-300"
+                className={`w-full border-2 rounded-xl px-4 py-3 bg-gradient-to-br from-yellow-50 to-orange-50 focus:outline-none focus:ring-4 pr-12 transition-all shadow-md ${
+                  errors.password ? "border-red-500 focus:ring-red-300" : "border-orange-300 focus:ring-orange-200 focus:border-orange-500"
                 }`}
               />
               <button
                 type="button"
                 onClick={togglePassword}
                 disabled={loading}
-                className="absolute inset-y-0 right-0 flex items-center pr-3 text-black"
+                className="absolute inset-y-0 right-0 flex items-center pr-4 text-gray-600 hover:text-orange-600 transition-colors"
               >
                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
             </div>
-            {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
+            {errors.password && (
+              <div className="mt-2 p-3 bg-red-50 border-2 border-red-200 rounded-xl flex items-start gap-2">
+                <span className="text-red-500 text-lg">⚠️</span>
+                <p className="text-red-600 text-sm font-semibold flex-1">{errors.password}</p>
+              </div>
+            )}
           </div>
 
           {/* Button */}
           <button
             type="submit"
             disabled={loading}
-            className="bg-orange-400 hover:bg-orange-700 hover:text-white text-black font-bold py-2 rounded-full shadow transition-colors duration-200 w-full flex justify-center items-center"
+            className="group relative bg-gradient-to-r from-orange-400 to-red-500 hover:from-orange-500 hover:to-red-600 text-white font-bold py-4 rounded-2xl shadow-lg transition-all transform hover:scale-105 hover:shadow-2xl w-full flex justify-center items-center text-lg overflow-hidden mt-2"
           >
-            {loading ? <Loader2 className="animate-spin h-5 w-5" /> : "Login"}
+            <div className="absolute inset-0 bg-white opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+            <span className="relative">{loading ? <Loader2 className="animate-spin h-6 w-6" /> : "Login"}</span>
           </button>
         </form>
 
         {/* Footer */}
-        <div className="flex flex-col sm:flex-row justify-between mt-4 text-sm gap-2 sm:gap-0">
-          <p className="text-gray-700">
-            Belum punya akun? <Link to="/register" className="text-gray-700 underline">Daftar</Link>
+        <div className="flex flex-col sm:flex-row justify-between mt-6 text-sm gap-2 sm:gap-0">
+          <p className="text-gray-700 font-medium">
+            Belum punya akun? <Link to="/register" className="text-orange-600 font-bold hover:underline">Daftar</Link>
           </p>
-          <Link to="/lupa-password" className="text-gray-700 hover:underline">Lupa Password?</Link>
+          <Link to="/lupa-password" className="text-orange-600 font-bold hover:underline">Lupa Password?</Link>
         </div>
       </div>
 

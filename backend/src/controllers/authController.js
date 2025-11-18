@@ -1,4 +1,4 @@
-const bcrypt = require('bcrypt');
+const bcryptjs = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 const emailService = require('../utils/emailService');
@@ -31,18 +31,18 @@ const authController = {
       }
 
       // Hash password
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
+      const salt = await bcryptjs.genSalt(10);
+      const hashedPassword = await bcryptjs.hash(password, salt);
 
-      // Create user
+      // Create user (langsung verified, tidak perlu email verification)
       const [result] = await db.query(
-        'INSERT INTO users (nama, email, password) VALUES (?, ?, ?)',
+        'INSERT INTO users (nama, email, password, is_verified) VALUES (?, ?, ?, true)',
         [nama, email, hashedPassword]
       );
 
       // Generate token
       const token = jwt.sign(
-        { id: result.insertId, email },
+        { userId: result.insertId, email },
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
       );
@@ -54,7 +54,8 @@ const authController = {
           user: {
             id: result.insertId,
             nama,
-            email
+            email,
+            is_verified: true
           },
           token
         }
@@ -71,6 +72,7 @@ const authController = {
   // Login user
   async login(req, res) {
     try {
+      console.log('Login attempt:', req.body);
       const { email, password } = req.body;
 
       // Validasi input
@@ -81,11 +83,13 @@ const authController = {
         });
       }
 
+      console.log('Querying database for user:', email);
       // Check if user exists
       const [users] = await db.query(
         'SELECT * FROM users WHERE email = ?',
         [email]
       );
+      console.log('User query result:', users.length, 'users found');
 
       if (users.length === 0) {
         return res.status(401).json({
@@ -97,7 +101,7 @@ const authController = {
       const user = users[0];
 
       // Check password
-      const validPassword = await bcrypt.compare(password, user.password);
+      const validPassword = await bcryptjs.compare(password, user.password);
       if (!validPassword) {
         return res.status(401).json({
           status: 'error',
@@ -107,10 +111,16 @@ const authController = {
 
       // Generate token
       const token = jwt.sign(
-        { id: user.id, email: user.email },
+        { userId: user.id, email: user.email },
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
       );
+
+      // Convert foto to base64 if exists
+      let fotoBase64 = null;
+      if (user.foto) {
+        fotoBase64 = `data:image/png;base64,${user.foto.toString('base64')}`;
+      }
 
       res.json({
         status: 'success',
@@ -119,7 +129,11 @@ const authController = {
           user: {
             id: user.id,
             nama: user.nama,
-            email: user.email
+            email: user.email,
+            telepon: user.telepon || null,
+            role: user.role,
+            foto: fotoBase64,
+            is_verified: user.is_verified
           },
           token
         }
@@ -190,6 +204,57 @@ const authController = {
     }
   },
 
+  // Verify email
+  async verifyEmail(req, res) {
+    try {
+      const { token } = req.params;
+
+      if (!token) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Token verifikasi tidak ditemukan'
+        });
+      }
+
+      try {
+        // Verify token
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        // Update user verification status
+        const [result] = await db.query(
+          'UPDATE users SET is_verified = true WHERE id = ? AND verification_token = ?',
+          [decoded.id, token]
+        );
+
+        if (result.affectedRows === 0) {
+          return res.status(400).json({
+            status: 'error',
+            message: 'Token verifikasi tidak valid atau sudah digunakan'
+          });
+        }
+
+        res.json({
+          status: 'success',
+          message: 'Email berhasil diverifikasi'
+        });
+      } catch (jwtError) {
+        if (jwtError.name === 'TokenExpiredError') {
+          return res.status(400).json({
+            status: 'error',
+            message: 'Token verifikasi telah kadaluarsa'
+          });
+        }
+        throw jwtError;
+      }
+    } catch (error) {
+      console.error('Verify email error:', error);
+      res.status(500).json({
+        status: 'error',
+        message: 'Terjadi kesalahan saat verifikasi email'
+      });
+    }
+  },
+
   // Verify reset token and reset password
   async resetPassword(req, res) {
     try {
@@ -221,8 +286,8 @@ const authController = {
         }
 
         // Hash new password
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(newPassword, salt);
+        const salt = await bcryptjs.genSalt(10);
+        const hashedPassword = await bcryptjs.hash(newPassword, salt);
 
         // Update password and clear reset token
         await db.query(

@@ -3,45 +3,47 @@ const db = require('../config/db');
 const soalController = {
   // Create kumpulan soal
   async createKumpulanSoal(req, res) {
+    const connection = await db.getConnection();
+    
     try {
       const { kategori_id, soal_list } = req.body;
       const created_by = req.user.id; // From auth middleware
 
       // Start transaction
-      await db.beginTransaction();
+      await connection.beginTransaction();
 
       try {
         // Create kumpulan_soal entry
-        const [kumpulanResult] = await db.query(
-          'INSERT INTO kumpulan_soal (kategori_id, created_by) VALUES (?, ?)',
-          [kategori_id, created_by]
+        const [kumpulanResult] = await connection.query(
+          'INSERT INTO kumpulan_soal (kategori_id, materi_id, created_by) VALUES (?, ?, ?)',
+          [kategori_id, req.body.materi_id || null, created_by]
         );
 
-        const kumpulan_id = kumpulanResult.insertId;
+        const kumpulan_soal_id = kumpulanResult.insertId;
 
         // Insert individual soal
         for (const soal of soal_list) {
-          await db.query(
-            'INSERT INTO soal (kumpulan_id, pertanyaan, pilihan_a, pilihan_b, pilihan_c, pilihan_d, jawaban_benar) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [kumpulan_id, soal.pertanyaan, soal.pilihan_a, soal.pilihan_b, soal.pilihan_c, soal.pilihan_d, soal.jawaban_benar]
+          await connection.query(
+            'INSERT INTO soal (kumpulan_soal_id, pertanyaan, pilihan_a, pilihan_b, pilihan_c, pilihan_d, jawaban_benar) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [kumpulan_soal_id, soal.pertanyaan, soal.pilihan_a, soal.pilihan_b, soal.pilihan_c, soal.pilihan_d, soal.jawaban_benar]
           );
         }
 
         // Commit transaction
-        await db.commit();
+        await connection.commit();
 
         res.status(201).json({
           status: 'success',
           message: 'Kumpulan soal berhasil dibuat',
           data: {
-            id: kumpulan_id,
+            kumpulan_soal_id: kumpulan_soal_id,
             kategori_id,
             soal_count: soal_list.length
           }
         });
       } catch (error) {
         // Rollback in case of error
-        await db.rollback();
+        await connection.rollback();
         throw error;
       }
     } catch (error) {
@@ -50,6 +52,8 @@ const soalController = {
         status: 'error',
         message: 'Terjadi kesalahan saat membuat kumpulan soal'
       });
+    } finally {
+      connection.release();
     }
   },
 
@@ -60,7 +64,7 @@ const soalController = {
 
       // Get kumpulan_soal info
       const [kumpulan] = await db.query(
-        'SELECT ks.*, k.nama as kategori_nama FROM kumpulan_soal ks JOIN kategori k ON ks.kategori_id = k.id WHERE ks.id = ?',
+        'SELECT ks.*, k.nama_kategori FROM kumpulan_soal ks JOIN kategori k ON ks.kategori_id = k.id WHERE ks.kumpulan_soal_id = ?',
         [id]
       );
 
@@ -73,7 +77,7 @@ const soalController = {
 
       // Get soal list
       const [soal] = await db.query(
-        'SELECT id, pertanyaan, pilihan_a, pilihan_b, pilihan_c, pilihan_d, jawaban_benar FROM soal WHERE kumpulan_id = ?',
+        'SELECT soal_id, pertanyaan, pilihan_a, pilihan_b, pilihan_c, pilihan_d, jawaban_benar FROM soal WHERE kumpulan_soal_id = ?',
         [id]
       );
 
@@ -95,23 +99,25 @@ const soalController = {
 
   // Update kumpulan soal
   async updateKumpulanSoal(req, res) {
+    const connection = await db.getConnection();
+    
     try {
       const { id } = req.params;
       const { kategori_id, soal_list } = req.body;
       const updated_by = req.user.id; // From auth middleware
 
       // Start transaction
-      await db.beginTransaction();
+      await connection.beginTransaction();
 
       try {
         // Update kumpulan_soal
-        const [kumpulanResult] = await db.query(
-          'UPDATE kumpulan_soal SET kategori_id = ?, updated_by = ? WHERE id = ?',
-          [kategori_id, updated_by, id]
+        const [kumpulanResult] = await connection.query(
+          'UPDATE kumpulan_soal SET kategori_id = ?, materi_id = ?, updated_by = ? WHERE kumpulan_soal_id = ?',
+          [kategori_id, req.body.materi_id || null, updated_by, id]
         );
 
         if (kumpulanResult.affectedRows === 0) {
-          await db.rollback();
+          await connection.rollback();
           return res.status(404).json({
             status: 'error',
             message: 'Kumpulan soal tidak ditemukan'
@@ -119,18 +125,18 @@ const soalController = {
         }
 
         // Delete existing soal
-        await db.query('DELETE FROM soal WHERE kumpulan_id = ?', [id]);
+        await connection.query('DELETE FROM soal WHERE kumpulan_soal_id = ?', [id]);
 
         // Insert updated soal
         for (const soal of soal_list) {
-          await db.query(
-            'INSERT INTO soal (kumpulan_id, pertanyaan, pilihan_a, pilihan_b, pilihan_c, pilihan_d, jawaban_benar) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          await connection.query(
+            'INSERT INTO soal (kumpulan_soal_id, pertanyaan, pilihan_a, pilihan_b, pilihan_c, pilihan_d, jawaban_benar) VALUES (?, ?, ?, ?, ?, ?, ?)',
             [id, soal.pertanyaan, soal.pilihan_a, soal.pilihan_b, soal.pilihan_c, soal.pilihan_d, soal.jawaban_benar]
           );
         }
 
         // Commit transaction
-        await db.commit();
+        await connection.commit();
 
         res.json({
           status: 'success',
@@ -143,7 +149,7 @@ const soalController = {
         });
       } catch (error) {
         // Rollback in case of error
-        await db.rollback();
+        await connection.rollback();
         throw error;
       }
     } catch (error) {
@@ -152,29 +158,33 @@ const soalController = {
         status: 'error',
         message: 'Terjadi kesalahan saat memperbarui kumpulan soal'
       });
+    } finally {
+      connection.release();
     }
   },
 
   // Delete kumpulan soal
   async deleteKumpulanSoal(req, res) {
+    const connection = await db.getConnection();
+    
     try {
       const { id } = req.params;
 
       // Start transaction
-      await db.beginTransaction();
+      await connection.beginTransaction();
 
       try {
         // Delete soal first (foreign key constraint)
-        await db.query('DELETE FROM soal WHERE kumpulan_id = ?', [id]);
+        await connection.query('DELETE FROM soal WHERE kumpulan_soal_id = ?', [id]);
 
         // Delete kumpulan_soal
-        const [result] = await db.query(
-          'DELETE FROM kumpulan_soal WHERE id = ?',
+        const [result] = await connection.query(
+          'DELETE FROM kumpulan_soal WHERE kumpulan_soal_id = ?',
           [id]
         );
 
         if (result.affectedRows === 0) {
-          await db.rollback();
+          await connection.rollback();
           return res.status(404).json({
             status: 'error',
             message: 'Kumpulan soal tidak ditemukan'
@@ -182,7 +192,7 @@ const soalController = {
         }
 
         // Commit transaction
-        await db.commit();
+        await connection.commit();
 
         res.json({
           status: 'success',
@@ -190,7 +200,7 @@ const soalController = {
         });
       } catch (error) {
         // Rollback in case of error
-        await db.rollback();
+        await connection.rollback();
         throw error;
       }
     } catch (error) {
@@ -199,6 +209,8 @@ const soalController = {
         status: 'error',
         message: 'Terjadi kesalahan saat menghapus kumpulan soal'
       });
+    } finally {
+      connection.release();
     }
   },
 
@@ -210,7 +222,7 @@ const soalController = {
       const [soal] = await db.query(
         `SELECT s.* 
          FROM soal s 
-         JOIN kumpulan_soal ks ON s.kumpulan_id = ks.id 
+         JOIN kumpulan_soal ks ON s.kumpulan_soal_id = ks.kumpulan_soal_id 
          WHERE ks.kategori_id = ?`,
         [kategoriId]
       );
@@ -221,6 +233,64 @@ const soalController = {
       });
     } catch (error) {
       console.error('Error getting soal by kategori:', error);
+      res.status(500).json({
+        status: 'error',
+        message: 'Terjadi kesalahan saat mengambil data soal'
+      });
+    }
+  },
+
+  // Get soal by materi_id
+  async getSoalByMateri(req, res) {
+    try {
+      const { materiId } = req.params;
+      console.log('🔍 getSoalByMateri called with materiId:', materiId);
+
+      // Get kumpulan_soal with soal for this materi
+      const [kumpulanSoal] = await db.query(
+        `SELECT ks.kumpulan_soal_id, ks.kategori_id, k.nama_kategori, ks.materi_id, ks.created_at
+         FROM kumpulan_soal ks 
+         JOIN kategori k ON ks.kategori_id = k.id
+         WHERE ks.materi_id = ?
+         LIMIT 1`,
+        [materiId]
+      );
+
+      console.log('📦 Kumpulan soal found:', kumpulanSoal.length);
+
+      if (kumpulanSoal.length === 0) {
+        console.log('❌ No kumpulan_soal found for materi_id:', materiId);
+        return res.json({
+          status: 'success',
+          data: {
+            kumpulan_soal_id: null,
+            soal_list: []
+          }
+        });
+      }
+
+      console.log('✅ Kumpulan soal ID:', kumpulanSoal[0].kumpulan_soal_id);
+
+      // Get soal list
+      const [soal] = await db.query(
+        'SELECT soal_id, pertanyaan, pilihan_a, pilihan_b, pilihan_c, pilihan_d, jawaban_benar FROM soal WHERE kumpulan_soal_id = ?',
+        [kumpulanSoal[0].kumpulan_soal_id]
+      );
+
+      console.log('📦 Soal found:', soal.length);
+      if (soal.length > 0) {
+        console.log('✅ First soal:', soal[0]);
+      }
+
+      res.json({
+        status: 'success',
+        data: {
+          ...kumpulanSoal[0],
+          soal_list: soal
+        }
+      });
+    } catch (error) {
+      console.error('Error getting soal by materi:', error);
       res.status(500).json({
         status: 'error',
         message: 'Terjadi kesalahan saat mengambil data soal'

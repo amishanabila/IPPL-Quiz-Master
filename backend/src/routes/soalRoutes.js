@@ -18,4 +18,7 @@ router.delete('/kumpulan/:id', auth, soalController.deleteKumpulanSoal);
 // Get soal by kategori
 router.get('/kategori/:kategoriId', soalController.getSoalByKategori);
 
+// Get soal by materi
+router.get('/materi/:materiId', soalController.getSoalByMateri);
+
 module.exports = router;

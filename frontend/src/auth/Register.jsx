@@ -95,19 +95,29 @@ export default function Register() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-yellow-200 p-4">
-      <div className="bg-yellow-50 p-6 sm:p-8 rounded-xl shadow-md w-full max-w-md relative">
-        <h1 className="text-2xl font-bold text-center mb-6">Buat Akun</h1>
+    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-yellow-300 via-yellow-200 to-orange-200 p-4 relative overflow-hidden">
+      {/* Animated Background Circles */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 left-10 w-64 h-64 bg-orange-300 rounded-full opacity-20 blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-20 right-10 w-80 h-80 bg-yellow-400 rounded-full opacity-20 blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
+        <div className="absolute top-1/2 left-1/3 w-72 h-72 bg-green-300 rounded-full opacity-15 blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+      </div>
+
+      <div className="relative bg-white/95 backdrop-blur-sm p-8 sm:p-10 rounded-3xl shadow-2xl w-full max-w-lg border-4 border-white/50 z-10">
+        <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-yellow-600 text-center mb-6">Buat Akun</h1>
 
         {/* Error API */}
         {errors.api && (
-          <div className="mb-4 text-red-600 text-center font-semibold">{errors.api}</div>
+          <div className="mb-4 p-4 bg-red-50 border-2 border-red-200 rounded-xl flex items-start gap-2">
+            <span className="text-red-500 text-xl">⚠️</span>
+            <p className="text-red-600 font-semibold flex-1">{errors.api}</p>
+          </div>
         )}
 
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
           {/* Email */}
           <div className="flex flex-col">
-            <label htmlFor="email" className="mb-1 font-medium">Email</label>
+            <label htmlFor="email" className="mb-1 font-medium text-gray-700">Email</label>
             <input
               type="email"
               id="email"
@@ -116,16 +126,23 @@ export default function Register() {
               value={formData.email}
               onChange={handleInputChange}
               disabled={loading}
-              className={`border rounded px-3 py-2 bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
-                errors.email ? "border-red-500 focus:ring-red-500 focus:border-red-500" : "border-gray-300"
+              className={`border-2 rounded-xl px-4 py-3 bg-gradient-to-r from-yellow-50 to-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400 transition-all duration-200 shadow-md ${
+                errors.email ? "border-red-500 focus:ring-red-500 focus:border-red-500" : "border-orange-200"
               }`}
             />
-            {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
+            {errors.email && (
+              <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-600 text-sm flex items-center gap-2">
+                  <span>⚠️</span>
+                  {errors.email}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Nama */}
           <div className="flex flex-col">
-            <label htmlFor="nama" className="mb-1 font-medium">Nama Lengkap</label>
+            <label htmlFor="nama" className="mb-1 font-medium text-gray-700">Nama Lengkap</label>
             <input
               type="text"
               id="nama"
@@ -134,16 +151,23 @@ export default function Register() {
               value={formData.nama}
               onChange={handleInputChange}
               disabled={loading}
-              className={`border rounded px-3 py-2 bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
-                errors.nama ? "border-red-500 focus:ring-red-500 focus:border-red-500" : "border-gray-300"
+              className={`border-2 rounded-xl px-4 py-3 bg-gradient-to-r from-yellow-50 to-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400 transition-all duration-200 shadow-md ${
+                errors.nama ? "border-red-500 focus:ring-red-500 focus:border-red-500" : "border-orange-200"
               }`}
             />
-            {errors.nama && <p className="text-red-500 text-sm mt-1">{errors.nama}</p>}
+            {errors.nama && (
+              <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-600 text-sm flex items-center gap-2">
+                  <span>⚠️</span>
+                  {errors.nama}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Password */}
           <div className="flex flex-col">
-            <label htmlFor="password" className="mb-1 font-medium">Password</label>
+            <label htmlFor="password" className="mb-1 font-medium text-gray-700">Password</label>
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
@@ -153,25 +177,32 @@ export default function Register() {
                 value={formData.password}
                 onChange={handleInputChange}
                 disabled={loading}
-                className={`w-full border rounded px-3 py-2 bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 pr-10 ${
-                  errors.password ? "border-red-500 focus:ring-red-500 focus:border-red-500" : "border-gray-300"
+                className={`w-full border-2 rounded-xl px-4 py-3 bg-gradient-to-r from-yellow-50 to-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400 transition-all duration-200 shadow-md pr-12 ${
+                  errors.password ? "border-red-500 focus:ring-red-500 focus:border-red-500" : "border-orange-200"
                 }`}
               />
               <button
                 type="button"
                 onClick={togglePassword}
                 disabled={loading}
-                className="absolute inset-y-0 right-0 flex items-center pr-3 text-black"
+                className="absolute inset-y-0 right-0 flex items-center pr-4 text-gray-600 hover:text-orange-600 transition-colors"
               >
                 {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
             </div>
-            {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
+            {errors.password && (
+              <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-600 text-sm flex items-center gap-2">
+                  <span>⚠️</span>
+                  {errors.password}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Konfirmasi Password */}
           <div className="flex flex-col">
-            <label htmlFor="konfirmasi" className="mb-1 font-medium">Konfirmasi Password</label>
+            <label htmlFor="konfirmasi" className="mb-1 font-medium text-gray-700">Konfirmasi Password</label>
             <div className="relative">
               <input
                 type={showConfirm ? "text" : "password"}
@@ -181,36 +212,43 @@ export default function Register() {
                 value={formData.konfirmasi}
                 onChange={handleInputChange}
                 disabled={loading}
-                className={`w-full border rounded px-3 py-2 bg-yellow-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 pr-10 ${
-                  errors.konfirmasi ? "border-red-500 focus:ring-red-500 focus:border-red-500" : "border-gray-300"
+                className={`w-full border-2 rounded-xl px-4 py-3 bg-gradient-to-r from-yellow-50 to-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400 transition-all duration-200 shadow-md pr-12 ${
+                  errors.konfirmasi ? "border-red-500 focus:ring-red-500 focus:border-red-500" : "border-orange-200"
                 }`}
               />
               <button
                 type="button"
                 onClick={toggleConfirm}
                 disabled={loading}
-                className="absolute inset-y-0 right-0 flex items-center pr-3 text-black"
+                className="absolute inset-y-0 right-0 flex items-center pr-4 text-gray-600 hover:text-orange-600 transition-colors"
               >
                 {showConfirm ? <EyeOff size={20} /> : <Eye size={20} />}
               </button>
             </div>
-            {errors.konfirmasi && <p className="text-red-500 text-sm mt-1">{errors.konfirmasi}</p>}
+            {errors.konfirmasi && (
+              <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-600 text-sm flex items-center gap-2">
+                  <span>⚠️</span>
+                  {errors.konfirmasi}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Button */}
           <button
             type="submit"
             disabled={loading}
-            className="bg-orange-400 hover:bg-orange-700 hover:text-white text-black font-bold py-2 rounded-full shadow transition-colors duration-200 w-full flex justify-center items-center"
+            className="bg-gradient-to-r from-orange-400 to-red-500 hover:from-orange-500 hover:to-red-600 text-white font-bold py-3 rounded-xl shadow-lg transition-all duration-200 w-full flex justify-center items-center hover:scale-[1.02] active:scale-[0.98]"
           >
             {loading ? <Loader2 className="animate-spin h-5 w-5" /> : "Daftar"}
           </button>
         </form>
 
         {/* Footer */}
-        <div className="mt-4 text-sm text-center text-gray-600">
+        <div className="mt-6 text-sm text-center text-gray-600">
           Sudah punya akun?{" "}
-          <Link to="/login" className="text-gray-600 underline hover:underline">Masuk</Link>
+          <Link to="/login" className="text-orange-600 font-bold hover:text-orange-700 transition-colors">Masuk</Link>
         </div>
       </div>
 

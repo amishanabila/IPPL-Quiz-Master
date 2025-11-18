@@ -10,43 +10,68 @@ export default function Header() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [showLogoutPopup, setShowLogoutPopup] = useState(false);
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const dropdownRef = useRef(null);
 
   useEffect(() => {
     let mounted = true;
-    (async () => {
+    
+    const fetchProfile = async () => {
       try {
-        const res = await authService.getProfile();
-        if (res && res.status === "success" && res.data && res.data.user) {
-          const storedPhoto = localStorage.getItem("profilePhoto");
-          if (!mounted) return;
-          setUser({ ...res.data.user, foto: storedPhoto || res.data.user.foto });
-        } else {
-          const local = authService.getCurrentUser();
-          if (local) {
-            const storedPhoto = localStorage.getItem("profilePhoto");
-            setUser({ ...local, foto: storedPhoto || local.foto });
-          } else navigate("/login");
+        setLoading(true);
+        const token = authService.getToken();
+        
+        if (!token) {
+          if (mounted) {
+            const local = authService.getCurrentUser();
+            if (local) {
+              setUser({ ...local, foto: null });
+            }
+            // Tidak redirect otomatis, biarkan halaman yang handle sendiri
+          }
+          setLoading(false);
+          return;
         }
-      } catch {
-        const local = authService.getCurrentUser();
-        if (local) {
-          const storedPhoto = localStorage.getItem("profilePhoto");
-          setUser({ ...local, foto: storedPhoto || local.foto });
-        } else navigate("/login");
-      }
-    })();
 
-    function onProfileUpdated(e) {
-      const updatedUser = e.detail || authService.getCurrentUser();
-      const storedPhoto = localStorage.getItem("profilePhoto");
-      setUser({ ...updatedUser, foto: storedPhoto || updatedUser.foto });
-    }
-    window.addEventListener("profileUpdated", onProfileUpdated);
+        const res = await authService.getProfile();
+        
+        if (res && res.status === "success" && res.data && res.data.user) {
+          if (mounted) {
+            const userData = res.data.user;
+            setUser(userData);
+          }
+        } else {
+          throw new Error(res?.message || "Gagal memuat profil");
+        }
+      } catch (err) {
+        console.error("Header - Failed to fetch profile:", err);
+        // Fallback to localStorage
+        const local = authService.getCurrentUser();
+        if (local && mounted) {
+          setUser({ ...local, foto: null });
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchProfile();
+
+    // Listen for profile updates
+    const handleProfileUpdated = (e) => {
+      const updatedUser = e.detail;
+      if (mounted) {
+        setUser(updatedUser);
+      }
+    };
+    
+    window.addEventListener("profileUpdated", handleProfileUpdated);
 
     return () => {
       mounted = false;
-      window.removeEventListener("profileUpdated", onProfileUpdated);
+      window.removeEventListener("profileUpdated", handleProfileUpdated);
     };
   }, [navigate]);
 
@@ -74,14 +99,25 @@ export default function Header() {
   const cancelLogout = () => setShowLogoutPopup(false);
 
   return (
-    <header className="w-full bg-[#fbe497] relative z-50">
+    <header className="w-full bg-white/80 backdrop-blur-sm shadow-lg border-b-2 border-orange-200 relative z-40">
       <div className="flex flex-wrap items-center justify-between px-4 md:px-8 py-3 gap-4">
-        {/* === Logo === */}
-        <img
-          src="/logo.png"
-          alt="QuizMaster Logo"
-          className="h-[80px] w-[80px] md:h-[120px] md:w-[120px]"
-        />
+        {/* === Logo with Brand === */}
+        <div className="flex items-center gap-3 relative group cursor-pointer" onClick={() => navigate('/halaman-awal-kreator')}>
+          <div className="relative">
+            <div className="absolute inset-0 bg-gradient-to-r from-orange-400 to-yellow-400 rounded-full blur-lg opacity-30 group-hover:opacity-50 transition-opacity"></div>
+            <img
+              src="/logo.png"
+              alt="QuizMaster Logo"
+              className="h-[60px] w-[60px] md:h-[80px] md:w-[80px] relative drop-shadow-xl transform group-hover:scale-110 transition-transform duration-300"
+            />
+          </div>
+          <div className="hidden md:block">
+            <h1 className="text-2xl md:text-3xl font-black bg-gradient-to-r from-orange-600 to-yellow-600 bg-clip-text text-transparent drop-shadow-sm">
+              QuizMaster
+            </h1>
+            <p className="text-xs text-gray-600 font-medium">Create • Learn • Excel</p>
+          </div>
+        </div>
 
         {/* === Profil User (Desktop) === */}
         <div
@@ -89,32 +125,33 @@ export default function Header() {
           ref={dropdownRef}
         >
           <div
-            className="flex items-center gap-2 rounded-full overflow-hidden border-2 border-black p-2 cursor-pointer bg-[#FFB347] hover:bg-orange-700 group transition"
+            className="flex items-center gap-2 rounded-full overflow-hidden border-2 border-orange-400 p-2 cursor-pointer bg-gradient-to-r from-orange-400 to-red-500 hover:from-orange-500 hover:to-red-600 group transition-all shadow-lg"
             onClick={() => setIsDropdownOpen((prev) => !prev)}
           >
             <img
-              src={user?.foto || "/icon/default-avatar.png"}
+              src={user?.foto || "icon/user.png"}
               alt={user?.nama || "pengguna"}
-              className="w-6 h-6 rounded-full object-cover"
+              className="w-6 h-6 rounded-full object-cover border-2 border-white"
+              onError={(e) => {
+                e.target.src = "user.png";
+              }}
             />
             <span
-              className="text-sm font-bold text-black group-hover:text-white transition-colors max-w-[80px] truncate"
+              className="text-sm font-bold text-white transition-colors max-w-[80px] truncate"
               title={user?.nama}
             >
               {user?.nama || "User"}
             </span>
             <ChevronDown
-              className={`w-4 h-4 transition-all duration-200 ${
-                isDropdownOpen
-                  ? "rotate-180 text-white"
-                  : "text-black group-hover:text-white"
+              className={`w-4 h-4 transition-all duration-200 text-white ${
+                isDropdownOpen ? "rotate-180" : ""
               }`}
             />
           </div>
 
           {/* Dropdown */}
           <div
-            className={`absolute right-0 mt-[110px] w-40 bg-[#FFB347] rounded shadow z-50 font-semibold border border-black transition-all duration-200 origin-top ${
+            className={`absolute right-0 mt-[110px] w-40 bg-white backdrop-blur-sm rounded-xl shadow-2xl z-[100] font-semibold border-2 border-orange-200 transition-all duration-200 origin-top ${
               isDropdownOpen
                 ? "opacity-100 translate-y-0 scale-100"
                 : "opacity-0 -translate-y-2 scale-95 pointer-events-none"
@@ -122,16 +159,16 @@ export default function Header() {
           >
             <Link
               to="/profil"
-              className="block px-4 py-2 text-xs hover:bg-orange-700 hover:text-white transition"
+              className="block px-4 py-2 text-sm text-gray-700 hover:bg-gradient-to-r hover:from-orange-400 hover:to-yellow-500 hover:text-white transition rounded-lg mx-2 my-1 font-semibold"
               onClick={() => setIsDropdownOpen(false)}
             >
-              Pengaturan Akun
+              ⚙️ Pengaturan Akun
             </Link>
             <button
               onClick={handleLogout}
-              className="block w-full text-left px-4 py-2 text-xs hover:bg-orange-700 hover:text-white transition"
+              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gradient-to-r hover:from-red-400 hover:to-red-500 hover:text-white transition rounded-lg mx-2 my-1 font-semibold"
             >
-              Keluar
+              🚪 Keluar
             </button>
           </div>
         </div>

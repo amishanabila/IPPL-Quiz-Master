@@ -16,11 +16,8 @@ export const authService = {
       });
       const data = await response.json();
       
-      if (data.status === 'success') {
-        // Store token and user data
-        localStorage.setItem(AUTH_TOKEN_KEY, data.data.token);
-        localStorage.setItem(USER_DATA_KEY, JSON.stringify(data.data.user));
-      }
+      // Don't auto-login after registration
+      // User should manually login after successful registration
       
       return data;
     } catch (error) {
@@ -41,15 +38,35 @@ export const authService = {
       });
       const data = await response.json();
       
-      if (data.status === 'success') {
-        // Store token and user data
+      console.log('🔍 AuthService - Response dari backend:', data);
+      
+      // Backend mengembalikan: { status: 'success', data: { user, token } }
+      if (data.status === 'success' && data.data && data.data.token) {
+        // Store token
         localStorage.setItem(AUTH_TOKEN_KEY, data.data.token);
-        localStorage.setItem(USER_DATA_KEY, JSON.stringify(data.data.user));
+        
+        // Store user data without foto
+        const userData = { ...data.data.user };
+        delete userData.foto;
+        localStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
+        
+        console.log('✅ AuthService - Token dan user data tersimpan');
+        console.log('✅ AuthService - User:', userData);
+        
+        // Return format yang sudah benar
+        return {
+          status: 'success',
+          data: {
+            token: data.data.token,
+            user: userData
+          }
+        };
       }
       
+      console.log('❌ AuthService - Login gagal:', data);
       return data;
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('❌ AuthService - Login error:', error);
       throw error;
     }
   },
@@ -110,15 +127,34 @@ export const authService = {
   async getProfile() {
     try {
       const token = this.getToken();
+      if (!token) {
+        throw new Error('No auth token found');
+      }
+      
       const res = await fetch(`${BASE_URL}/user/me`, {
         method: 'GET',
         headers: {
-          Authorization: token ? `Bearer ${token}` : ''
+          'Authorization': `Bearer ${token}`
         }
       });
-      return await res.json();
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(`HTTP Error: ${res.status} ${res.statusText} - ${errorText}`);
+      }
+      
+      const data = await res.json();
+      
+      // Update localStorage with fresh data (without foto)
+      if (data.status === 'success' && data.data && data.data.user) {
+        const userData = { ...data.data.user };
+        delete userData.foto;
+        localStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
+      }
+      
+      return data;
     } catch (err) {
-      console.error('getProfile error', err);
+      console.error('getProfile error:', err);
       throw err;
     }
   },
@@ -136,12 +172,12 @@ export const authService = {
         body: formData
       });
       const data = await res.json();
-      // Do NOT force-save photo to localStorage; update stored userData (without foto) if present
+      // Update stored userData without foto field (foto comes from database)
       if (data.status === 'success' && data.data && data.data.user) {
-        // update local stored user data but avoid saving the foto field in localStorage
         const stored = JSON.parse(localStorage.getItem(USER_DATA_KEY) || '{}');
         const userUpdate = { ...stored, ...data.data.user };
-        if (userUpdate.foto) delete userUpdate.foto; // do not persist foto in localStorage
+        // Remove foto from localStorage; always fetch from database
+        delete userUpdate.foto;
         localStorage.setItem(USER_DATA_KEY, JSON.stringify(userUpdate));
       }
       return data;

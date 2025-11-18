@@ -3,19 +3,19 @@ import React from "react";
 const PasswordBaruBerhasil = ({ onClose }) => {
   return (
     <>
-      <div className="fixed inset-0 bg-orange-500/50 backdrop-blur z-50"></div>
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 animate-fadeIn"></div>
 
-      <div className="fixed inset-0 flex items-center justify-center z-50">
-        <div className="bg-orange-400 rounded shadow p-4 sm:p-6 w-[90%] sm:w-[400px] md:w-[500px] max-w-full text-center">
+      <div className="fixed inset-0 flex items-center justify-center z-50 px-4 animate-fadeIn">
+        <div className="bg-gradient-to-br from-orange-100 to-yellow-100 rounded-2xl shadow-2xl p-6 sm:p-8 w-[90%] sm:w-[400px] md:w-[500px] max-w-full text-center border-2 border-orange-300 animate-scaleIn">
           <div className="flex justify-center mb-4">
-            <div className="w-[75px] h-[75px] border-4 border-green-500 rounded-full flex items-center justify-center">
+            <div className="w-[85px] h-[85px] border-4 border-green-500 rounded-full flex items-center justify-center bg-white shadow-lg animate-bounce" style={{ animationDuration: '1s', animationIterationCount: '2' }}>
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                className="h-10 w-10 text-green-500"
+                className="h-12 w-12 text-green-500"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
-                strokeWidth={2}
+                strokeWidth={3}
               >
                 <path
                   strokeLinecap="round"
@@ -25,14 +25,14 @@ const PasswordBaruBerhasil = ({ onClose }) => {
               </svg>
             </div>
           </div>
-          <h2 className="text-xl font-bold text-white mb-4">
+          <h2 className="text-2xl font-bold bg-gradient-to-r from-orange-600 to-yellow-600 bg-clip-text text-transparent mb-6">
             Password Baru Berhasil Disimpan!
           </h2>
           <button
             onClick={onClose}
-            className="font-semibold px-5 py-2 bg-green-500 text-white rounded shadow hover:bg-green-600 transition"
+            className="font-bold px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl shadow-lg hover:from-green-600 hover:to-green-700 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] w-full"
           >
-            Kembali ke Halaman Login
+            🔐 Kembali ke Halaman Login
           </button>
         </div>
       </div>

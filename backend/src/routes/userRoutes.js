@@ -1,17 +1,25 @@
 const express = require('express');
+const multer = require('multer');
 const router = express.Router();
 const UserController = require('../controllers/userController');
 const auth = require('../middleware/auth');
 
-// Auth routes
-router.post('/register', UserController.register);
-router.post('/login', UserController.login);
-router.get('/verify-email/:token', UserController.verifyEmail);
-router.post('/request-reset-password', UserController.requestResetPassword);
-router.post('/reset-password', UserController.resetPassword);
+// Configure multer for photo uploads
+const storage = multer.memoryStorage(); // Store in memory as binary
+const upload = multer({
+    storage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype.startsWith('image/')) {
+            cb(null, true);
+        } else {
+            cb(new Error('Only image files are allowed'));
+        }
+    }
+});
 
-// Protected routes
-router.get('/profile', auth, UserController.getProfile);
-router.put('/profile', auth, UserController.updateProfile);
+// Protected user routes (require auth middleware)
+router.get('/me', auth, UserController.getProfile);
+router.put('/me', auth, upload.single('photo'), UserController.updateProfile);
 
 module.exports = router;

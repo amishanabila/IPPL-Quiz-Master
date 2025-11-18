@@ -19,14 +19,26 @@ export default function HasilAkhir() {
 
   if (!hasil) {
     return (
-      <div className="p-6 max-w-3xl mx-auto">
-        <h1 className="text-xl font-bold mb-4">Tidak ada hasil ditemukan.</h1>
-        <button
-          onClick={() => navigate("/")}
-          className="px-4 py-2 bg-blue-500 text-white rounded-lg"
-        >
-          Kembali ke Beranda
-        </button>
+      <div className="min-h-screen bg-gradient-to-br from-yellow-300 via-yellow-200 to-orange-200 flex items-center justify-center p-6 relative overflow-hidden">
+        {/* Animated Background Circles */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-20 left-10 w-64 h-64 bg-orange-300 rounded-full opacity-20 blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-20 right-10 w-80 h-80 bg-yellow-400 rounded-full opacity-20 blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
+        </div>
+        
+        <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl p-8 max-w-md w-full border-4 border-orange-300 relative z-10">
+          <div className="w-24 h-24 bg-gradient-to-br from-orange-100 to-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-5xl">❌</span>
+          </div>
+          <h1 className="text-2xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-red-600 mb-2">Tidak Ada Hasil</h1>
+          <p className="text-center text-gray-600 mb-6 font-medium">Tidak ada hasil quiz ditemukan.</p>
+          <button
+            onClick={() => navigate("/")}
+            className="w-full px-6 py-3 bg-gradient-to-r from-orange-400 to-yellow-500 hover:from-orange-500 hover:to-yellow-600 text-white rounded-xl font-bold shadow-lg transition-all transform hover:scale-105"
+          >
+            Kembali ke Beranda
+          </button>
+        </div>
       </div>
     );
   }
@@ -36,61 +48,215 @@ export default function HasilAkhir() {
   // Hitung skor → PG dan isian/essay jika jawaban cocok kunci
   const benar = soalList.filter((soal) => {
     if (soal.jenis === "pilihan_ganda") return jawabanUser[soal.id] === soal.jawaban;
+    
+    // Untuk isian singkat dengan multiple jawaban
+    if (soal.jenis === "isian" && Array.isArray(soal.jawaban)) {
+      const userAnswer = (jawabanUser[soal.id] || "").trim().toLowerCase();
+      return soal.jawaban.some(jawab => jawab.trim().toLowerCase() === userAnswer);
+    }
+    
+    // Single jawaban (essay atau old format)
     return jawabanUser[soal.id]?.trim() === (soal.jawaban?.trim() || ""); 
   }).length;
 
   const total = soalList.length;
+  const persentase = Math.round((benar / total) * 100);
+
+  // Tentukan grade dan pesan
+  let grade = "";
+  let gradeColor = "";
+  let gradeEmoji = "";
+  let message = "";
+
+  if (persentase >= 90) {
+    grade = "A";
+    gradeColor = "from-green-500 to-emerald-600";
+    gradeEmoji = "🏆";
+    message = "Luar Biasa! Sempurna!";
+  } else if (persentase >= 80) {
+    grade = "B+";
+    gradeColor = "from-blue-500 to-cyan-600";
+    gradeEmoji = "⭐";
+    message = "Bagus Sekali!";
+  } else if (persentase >= 70) {
+    grade = "B";
+    gradeColor = "from-indigo-500 to-purple-600";
+    gradeEmoji = "👍";
+    message = "Cukup Baik!";
+  } else if (persentase >= 60) {
+    grade = "C";
+    gradeColor = "from-yellow-500 to-orange-500";
+    gradeEmoji = "💪";
+    message = "Terus Belajar!";
+  } else {
+    grade = "D";
+    gradeColor = "from-orange-500 to-red-500";
+    gradeEmoji = "📚";
+    message = "Jangan Menyerah!";
+  }
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
-       <h1 className="text-2xl font-bold text-center">Hasil Akhir</h1>
-  <p className="text-gray-700 mt-1 text-center font-semibold">
-    {kategori} ({materi})
-  </p>
-      <p className="mb-5 mt-5 text-center font-semibold text-xl">
-        Skor: <span className="font-bold">{benar} / {total}</span>
-      </p>
-
-      <div className="space-y-6">
-        {soalList.map((soal) => {
-          const jawabanBenar = soal.jawaban || "-";
-          const jawabanKamu = jawabanUser[soal.id] || "-";
-          const isCorrect =
-            soal.jenis === "pilihan_ganda"
-              ? jawabanKamu === jawabanBenar
-              : jawabanKamu.trim() === jawabanBenar.trim();
-
-          return (
-            <div
-              key={soal.id}
-              className="border rounded-lg p-4 shadow-sm bg-white"
-            >
-              <p className="font-semibold mb-2">
-                {soal.id}. {soal.soal}
-              </p>
-              {soal.gambar && (
-                <img
-                  src={soal.gambar}
-                  alt="Soal"
-                  className="w-32 h-32 object-cover mb-2 rounded"
-                />
-              )}
-              <p className={`mb-1 ${isCorrect ? "text-green-600" : "text-red-600"}`}>
-                Jawaban Kamu: {jawabanKamu}
-              </p>
-              <p className="text-green-700">Jawaban Benar: {jawabanBenar}</p>
-            </div>
-          );
-        })}
+    <div className="min-h-screen bg-gradient-to-br from-yellow-300 via-yellow-200 to-orange-200 py-8 px-4 relative overflow-hidden">
+      {/* Animated Background Circles */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 left-10 w-64 h-64 bg-orange-300 rounded-full opacity-20 blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-20 right-10 w-80 h-80 bg-yellow-400 rounded-full opacity-20 blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
+        <div className="absolute top-1/2 left-1/3 w-72 h-72 bg-green-300 rounded-full opacity-15 blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
       </div>
 
-      <div className="mt-6">
-        <button
-          onClick={() => navigate("/")}
-          className="px-4 py-2 bg-blue-500 text-white rounded font-semibold"
-        >
-          Kembali ke Beranda
-        </button>
+      <div className="max-w-4xl mx-auto relative z-10">
+        {/* Header Card dengan Score */}
+        <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl p-8 mb-6 border-t-8 border-orange-500">
+          <div className="text-center mb-6">
+            <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-yellow-600 mb-2">
+              Hasil Quiz
+            </h1>
+            <div className="flex items-center justify-center gap-2 text-gray-600 font-semibold">
+              <span className="px-3 py-1 bg-orange-100 rounded-full text-orange-700">{kategori}</span>
+              <span>•</span>
+              <span>{materi}</span>
+            </div>
+          </div>
+
+          {/* Score Circle */}
+          <div className="flex flex-col items-center mb-6">
+            <div className={`w-48 h-48 rounded-full bg-gradient-to-br ${gradeColor} flex flex-col items-center justify-center shadow-2xl transform transition-all duration-300 hover:scale-110`}>
+              <div className="text-7xl mb-2">{gradeEmoji}</div>
+              <div className="text-6xl font-black text-white">{grade}</div>
+            </div>
+            <p className="text-3xl font-bold text-gray-800 mt-4">{message}</p>
+          </div>
+
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-4 mt-6">
+            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl p-4 text-center border-2 border-green-200">
+              <div className="text-3xl font-black text-green-600">{benar}</div>
+              <div className="text-sm font-semibold text-green-700">Benar</div>
+            </div>
+            <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-4 text-center border-2 border-red-200">
+              <div className="text-3xl font-black text-red-600">{total - benar}</div>
+              <div className="text-sm font-semibold text-red-700">Salah</div>
+            </div>
+            <div className="bg-gradient-to-br from-orange-50 to-yellow-100 rounded-xl p-4 text-center border-2 border-orange-200">
+              <div className="text-3xl font-black text-orange-600">{persentase}%</div>
+              <div className="text-sm font-semibold text-orange-700">Skor</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Review Section */}
+        <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-xl p-6 mb-6">
+          <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <span className="text-3xl">📝</span>
+            <span>Review Jawaban</span>
+          </h2>
+          <div className="space-y-4">
+            {soalList.map((soal, index) => {
+              const jawabanBenar = Array.isArray(soal.jawaban) 
+                ? soal.jawaban.join(" / ") 
+                : soal.jawaban || "-";
+              const jawabanKamu = jawabanUser[soal.id] || "-";
+              
+              let isCorrect = false;
+              if (soal.jenis === "pilihan_ganda") {
+                isCorrect = jawabanKamu === soal.jawaban;
+              } else if (soal.jenis === "isian" && Array.isArray(soal.jawaban)) {
+                // Check if user answer matches any of the accepted answers
+                const userAnswer = jawabanKamu.trim().toLowerCase();
+                isCorrect = soal.jawaban.some(jawab => jawab.trim().toLowerCase() === userAnswer);
+              } else {
+                isCorrect = jawabanKamu.trim() === (soal.jawaban?.trim() || "");
+              }
+
+              return (
+                <div
+                  key={soal.id}
+                  className={`border-2 rounded-xl p-5 shadow-md transition-all duration-200 ${
+                    isCorrect 
+                      ? "bg-gradient-to-r from-green-50 to-emerald-50 border-green-300" 
+                      : "bg-gradient-to-r from-red-50 to-pink-50 border-red-300"
+                  }`}
+                >
+                  {/* Question Header */}
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-lg shadow-md ${
+                      isCorrect 
+                        ? "bg-gradient-to-br from-green-500 to-emerald-600 text-white" 
+                        : "bg-gradient-to-br from-red-500 to-pink-600 text-white"
+                    }`}>
+                      {index + 1}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-bold text-gray-800 text-lg leading-relaxed">
+                        {soal.soal}
+                      </p>
+                      {soal.gambar && (
+                        <img
+                          src={soal.gambar}
+                          alt="Soal"
+                          className="mt-3 w-48 h-48 object-cover rounded-lg border-2 border-gray-300 shadow-md"
+                          onLoad={() => console.log('✅ Gambar hasil akhir berhasil dimuat')}
+                          onError={(e) => {
+                            console.error('❌ Gagal memuat gambar hasil akhir');
+                            e.target.style.display = 'none';
+                          }}
+                        />
+                      )}
+                    </div>
+                    <div className={`px-4 py-2 rounded-full font-bold text-sm shadow-md ${
+                      isCorrect 
+                        ? "bg-green-500 text-white" 
+                        : "bg-red-500 text-white"
+                    }`}>
+                      {isCorrect ? "✅ Benar" : "❌ Salah"}
+                    </div>
+                  </div>
+
+                  {/* Answers */}
+                  <div className="space-y-3 ml-13">
+                    <div className={`p-4 rounded-lg border-2 ${
+                      isCorrect 
+                        ? "bg-white border-green-300" 
+                        : "bg-white border-red-300"
+                    }`}>
+                      <p className="text-sm font-semibold text-gray-600 mb-1 flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${isCorrect ? "bg-green-500" : "bg-red-500"}`}></span>
+                        Jawaban Kamu:
+                      </p>
+                      <p className={`font-bold text-lg ${
+                        isCorrect ? "text-green-700" : "text-red-700"
+                      }`}>
+                        {jawabanKamu}
+                      </p>
+                    </div>
+
+                    {!isCorrect && (
+                      <div className="p-4 rounded-lg bg-gradient-to-r from-green-100 to-emerald-100 border-2 border-green-300">
+                        <p className="text-sm font-semibold text-gray-600 mb-1 flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                          Jawaban Benar:
+                        </p>
+                        <p className="font-bold text-lg text-green-700">
+                          {jawabanBenar}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex justify-center">
+          <button
+            onClick={() => navigate("/")}
+            className="px-8 py-4 bg-gradient-to-r from-orange-400 to-yellow-500 hover:from-orange-500 hover:to-yellow-600 text-white rounded-2xl font-bold shadow-lg transition-all transform hover:scale-105 text-lg"
+          >
+            🏠 Kembali ke Beranda
+          </button>
+        </div>
       </div>
     </div>
   );

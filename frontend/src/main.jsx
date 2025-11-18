@@ -5,7 +5,7 @@ import "./index.css";
 
 // Import halaman
 import Role from "./auth/Role.jsx";
-import HalamanAwal from "./HalamanAwal.jsx";
+import HalamanAwalKreator from "./HalamanAwalKreator.jsx";
 import HalamanAwalPeserta from "./HalamanAwalPeserta.jsx";
 import Login from "./auth/Login.jsx";
 import Register from "./auth/Register.jsx";
@@ -14,8 +14,10 @@ import PasswordBaru from "./auth/PasswordBaru.jsx";
 import Profil from "./auth/Profil.jsx";
 import KumpulanMateri from "./materi/KumpulanMateri.jsx";
 import Soal from "./soal/Soal.jsx";
+import LihatSoal from "./soal/LihatSoal.jsx";
 import BuatSoal from "./buat soal/BuatSoal.jsx";       
-import HasilAkhir from "./hasil akhir/HasilAkhir.jsx"; 
+import HasilAkhir from "./hasil akhir/HasilAkhir.jsx";
+import Leaderboard from "./leaderboard/Leaderboard.jsx"; 
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
@@ -26,7 +28,9 @@ createRoot(document.getElementById("root")).render(
         
         {/* Halaman peserta */}
         <Route path="/halaman-awal-peserta" element={<HalamanAwalPeserta />} />
-        <Route path="/halaman-awal" element={<HalamanAwal />} />
+        <Route path="/halaman-awal-kreator" element={<HalamanAwalKreator />} />
+        {/* Alias untuk backward compatibility - default ke kreator */}
+        <Route path="/halaman-awal-kreator" element={<HalamanAwalKreator />} />
         
         {/* Daftar Materi */}
         <Route path="/kumpulan-materi" element={<KumpulanMateri />} />
@@ -36,9 +40,15 @@ createRoot(document.getElementById("root")).render(
 
         {/* Halaman Soal Dinamis */}
         <Route path="/soal/:slug" element={<Soal />} />
+        
+        {/* Halaman Lihat Soal (view only) */}
+        <Route path="/lihat-soal/:kategori" element={<LihatSoal />} />
 
         {/* Halaman Hasil Akhir */}
         <Route path="/hasil-akhir" element={<HasilAkhir />} />
+
+        {/* Halaman Leaderboard */}
+        <Route path="/leaderboard" element={<Leaderboard />} />
 
         {/* Halaman login & register */}
         <Route path="/login" element={<Login />} />

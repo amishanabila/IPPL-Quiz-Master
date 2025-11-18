@@ -5,11 +5,15 @@ const materiController = {
   async getMateri(req, res) {
     try {
       const { kategori_id } = req.query;
-      let query = 'SELECT * FROM materi';
+      let query = `
+        SELECT m.*, k.nama_kategori 
+        FROM materi m 
+        LEFT JOIN kategori k ON m.kategori_id = k.id
+      `;
       let params = [];
 
       if (kategori_id) {
-        query = 'SELECT * FROM materi WHERE kategori_id = ?';
+        query += ' WHERE m.kategori_id = ?';
         params = [kategori_id];
       }
 
@@ -33,7 +37,7 @@ const materiController = {
     try {
       const { id } = req.params;
       const [materi] = await db.query(
-        'SELECT * FROM materi WHERE id = ?',
+        'SELECT * FROM materi WHERE materi_id = ?',
         [id]
       );
 
@@ -60,11 +64,11 @@ const materiController = {
   // Create new materi
   async createMateri(req, res) {
     try {
-      const { judul, deskripsi, kategori_id, isi_materi } = req.body;
+      const { judul, kategori_id, isi_materi } = req.body;
 
       const [result] = await db.query(
-        'INSERT INTO materi (judul, deskripsi, kategori_id, isi_materi) VALUES (?, ?, ?, ?)',
-        [judul, deskripsi, kategori_id, isi_materi]
+        'INSERT INTO materi (judul, kategori_id, isi_materi) VALUES (?, ?, ?)',
+        [judul, kategori_id, isi_materi]
       );
 
       res.status(201).json({
@@ -73,7 +77,6 @@ const materiController = {
         data: {
           id: result.insertId,
           judul,
-          deskripsi,
           kategori_id,
           isi_materi
         }
@@ -91,11 +94,11 @@ const materiController = {
   async updateMateri(req, res) {
     try {
       const { id } = req.params;
-      const { judul, deskripsi, kategori_id, isi_materi } = req.body;
+      const { judul, kategori_id, isi_materi } = req.body;
 
       const [result] = await db.query(
-        'UPDATE materi SET judul = ?, deskripsi = ?, kategori_id = ?, isi_materi = ? WHERE id = ?',
-        [judul, deskripsi, kategori_id, isi_materi, id]
+        'UPDATE materi SET judul = ?, kategori_id = ?, isi_materi = ? WHERE materi_id = ?',
+        [judul, kategori_id, isi_materi, id]
       );
 
       if (result.affectedRows === 0) {
@@ -131,7 +134,7 @@ const materiController = {
       const { id } = req.params;
 
       const [result] = await db.query(
-        'DELETE FROM materi WHERE id = ?',
+        'DELETE FROM materi WHERE materi_id = ?',
         [id]
       );
 
