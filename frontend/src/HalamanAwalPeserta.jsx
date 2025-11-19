@@ -82,16 +82,6 @@ export default function HalamanAwalPeserta() {
 
     try {
       const cleanPin = pin.replace(/\s+/g, '');
-      
-      // Store data peserta
-      const pesertaData = {
-        pin: cleanPin,
-        nama: nama.trim(),
-        quizData: quizData,
-        joinedAt: new Date().toISOString()
-      };
-      
-      localStorage.setItem('pesertaData', JSON.stringify(pesertaData));
 
       // Generate slug dari judul materi (bukan dari PIN)
       const materiName = quizData.judul || quizData.materi;

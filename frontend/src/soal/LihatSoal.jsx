@@ -69,8 +69,11 @@ export default function LihatSoal() {
   // Show loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-500">Loading soal...</div>
+      <div className="min-h-screen bg-gradient-to-br from-yellow-300 via-yellow-200 to-orange-200 flex items-center justify-center">
+        <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-8 shadow-2xl border-2 border-orange-200">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-500 border-t-transparent mx-auto mb-4"></div>
+          <p className="text-gray-700 font-semibold">Loading soal...</p>
+        </div>
       </div>
     );
   }
@@ -78,23 +81,30 @@ export default function LihatSoal() {
   // Show empty state
   if (!materiName && soalList.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4">
-        <div className="max-w-4xl mx-auto">
-          <button
-            onClick={() => navigate("/halaman-awal-kreator")}
-            className="mb-4 flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow hover:shadow-md transition"
-          >
-            <ArrowLeft size={20} />
-            Kembali
-          </button>
-          <div className="bg-white rounded-lg shadow-md p-8 text-center">
-            <div className="text-gray-400 mb-4">
-              <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
+      <div className="min-h-screen bg-gradient-to-br from-yellow-300 via-yellow-200 to-orange-200 relative overflow-hidden">
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-20 left-10 w-64 h-64 bg-orange-300 rounded-full opacity-20 blur-3xl animate-pulse"></div>
+          <div className="absolute bottom-20 right-10 w-80 h-80 bg-yellow-400 rounded-full opacity-20 blur-3xl animate-pulse"></div>
+        </div>
+        
+        <div className="relative z-10 p-4">
+          <div className="max-w-4xl mx-auto">
+            <button
+              onClick={() => navigate("/halaman-awal-kreator")}
+              className="mb-4 flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-xl hover:bg-white hover:shadow-lg transition-all font-semibold text-gray-700 border-2 border-orange-200"
+            >
+              <ArrowLeft size={20} />
+              Kembali
+            </button>
+            <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8 text-center border-2 border-orange-200">
+              <div className="text-orange-400 mb-4">
+                <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <p className="text-gray-700 font-bold text-lg mb-2">Tidak ada soal untuk ditampilkan</p>
+              <p className="text-sm text-gray-600">Materi ini belum memiliki soal</p>
             </div>
-            <p className="text-gray-600 font-semibold mb-2">Tidak ada soal untuk ditampilkan</p>
-            <p className="text-sm text-gray-500">Materi ini belum memiliki soal</p>
           </div>
         </div>
       </div>
@@ -102,41 +112,56 @@ export default function LihatSoal() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 p-4">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <button
-            onClick={() => navigate("/halaman-awal-kreator")}
-            className="mb-4 flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition"
-          >
-            <ArrowLeft size={20} />
-            Kembali
-          </button>
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">{materiName}</h1>
-          <p className="text-gray-600">Total: {soalList.length} soal</p>
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-yellow-300 via-yellow-200 to-orange-200 relative overflow-hidden">
+      {/* Animated Background Circles */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 left-10 w-64 h-64 bg-orange-300 rounded-full opacity-20 blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-20 right-10 w-80 h-80 bg-yellow-400 rounded-full opacity-20 blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
+        <div className="absolute top-1/2 left-1/3 w-72 h-72 bg-green-300 rounded-full opacity-15 blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+      </div>
 
-        {/* Daftar Soal */}
-        <div className="space-y-4">
-          {soalList.map((soal, idx) => {
-            const jenisSoal = soal.jenis || "pilihan_ganda";
-            
-            return (
-              <div key={idx} className="bg-white rounded-lg shadow-md p-6">
-                {/* Pertanyaan */}
-                <div className="mb-4">
-                  <div className="flex items-start gap-3">
-                    <span className="flex-shrink-0 w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center font-bold">
-                      {idx + 1}
-                    </span>
+      <div className="relative z-10 p-4">
+        <div className="max-w-4xl mx-auto">
+          {/* Header - Style seperti Profil */}
+          <div className="py-6 flex items-center justify-center mb-6">
+            <button
+              onClick={() => navigate("/halaman-awal-kreator")}
+              className="absolute top-6 left-6 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-xl hover:bg-white hover:shadow-lg transition-all font-semibold text-gray-700 border-2 border-orange-200"
+            >
+              ← Kembali
+            </button>
+
+            <h1 className="text-3xl md:text-4xl font-bold text-center bg-gradient-to-r from-orange-600 to-yellow-600 bg-clip-text text-transparent">
+              👁️ Lihat Soal
+            </h1>
+          </div>
+
+          {/* Info Materi */}
+          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-6 mb-6 border-2 border-orange-200">
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">{materiName}</h2>
+            <p className="text-gray-600 font-medium">📝 Total: {soalList.length} soal</p>
+          </div>
+
+          {/* Daftar Soal */}
+          <div className="space-y-4">
+            {soalList.map((soal, idx) => {
+              const jenisSoal = soal.jenis || "pilihan_ganda";
+              
+              return (
+                <div key={idx} className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-6 border-2 border-orange-100">
+                  {/* Pertanyaan */}
+                  <div className="mb-4">
+                    <div className="flex items-start gap-3">
+                      <span className="flex-shrink-0 w-8 h-8 bg-gradient-to-r from-orange-500 to-yellow-500 text-white rounded-full flex items-center justify-center font-bold shadow-lg">
+                        {idx + 1}
+                      </span>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
                         <p className="text-lg font-semibold text-gray-800">{soal.pertanyaan || soal.soal}</p>
                         <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                          jenisSoal === "pilihan_ganda" ? "bg-blue-100 text-blue-700" :
+                          jenisSoal === "pilihan_ganda" ? "bg-orange-100 text-orange-700" :
                           jenisSoal === "isian" ? "bg-green-100 text-green-700" :
-                          "bg-purple-100 text-purple-700"
+                          "bg-yellow-100 text-yellow-700"
                         }`}>
                           {jenisSoal === "pilihan_ganda" ? "Pilihan Ganda" :
                            jenisSoal === "isian" ? "Isian Singkat" : "Essay"}
@@ -146,7 +171,7 @@ export default function LihatSoal() {
                         <img 
                           src={soal.gambar} 
                           alt="Gambar soal" 
-                          className="mt-2 max-w-md w-full rounded-lg border-2 border-blue-200 shadow-md" 
+                          className="mt-2 max-w-md w-full rounded-lg border-2 border-orange-200 shadow-md" 
                           onLoad={() => console.log('✅ Gambar lihat soal dimuat untuk soal', idx + 1)}
                           onError={(e) => {
                             console.error('❌ Gagal memuat gambar lihat soal', idx + 1);
@@ -245,8 +270,9 @@ export default function LihatSoal() {
                   )}
                 </div>
               </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

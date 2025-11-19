@@ -1,26 +1,32 @@
 // src/pages/BuatSoal.jsx
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import FormBuatSoal from "../buat soal/FormBuatSoal";
-import { kategoriList } from "../kategori/Kategori";
+import { useNavigate, useLocation } from "react-router-dom";
+import FormBuatSoal from "../Buat Soal/FormBuatSoal";
 import Footer from "../footer/Footer";
-import { Loader2, Copy, Check } from "lucide-react"; // Loader icon
+import { Loader2 } from "lucide-react"; // Loader icon
 import { apiService } from "../services/api";
+import BuatSoalBerhasil from "../popup/BuatSoalBerhasil";
+import EditSoalBerhasil from "../popup/EditSoalBerhasil";
+import HapusSoalTerakhirPopup from "../popup/HapusSoalTerakhirPopup";
 
 export default function BuatSoal() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [kategori, setKategori] = useState("");
   const [kategoriCustom, setKategoriCustom] = useState("");
   const [showKategoriInput, setShowKategoriInput] = useState(false);
   const [materi, setMateri] = useState("");
   const [jumlahSoal, setJumlahSoal] = useState(1);
+  const [waktuPerSoal, setWaktuPerSoal] = useState(60); // 🔥 Timer per soal (default 60 detik)
   const [soalList, setSoalList] = useState([]);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false); // 🔥 loading state
   const [pinCode, setPinCode] = useState(""); // 🔥 PIN code state
-  const [copied, setCopied] = useState(false); // 🔥 copy state
   const [isEditMode, setIsEditMode] = useState(false); // 🔥 edit mode state
+  const [kumpulanSoalId, setKumpulanSoalId] = useState(null);
   const [kategoriFromAPI, setKategoriFromAPI] = useState([]); // kategori from API
+  const [showEditSuccess, setShowEditSuccess] = useState(false); // 🔥 popup edit sukses
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // 🔥 popup konfirmasi hapus soal terakhir
 
   // Load kategori from API
   React.useEffect(() => {
@@ -38,46 +44,66 @@ export default function BuatSoal() {
     loadKategori();
   }, []);
 
-  // Load data untuk edit mode
+  // Load data untuk edit mode dari location.state
   React.useEffect(() => {
-    const editData = sessionStorage.getItem("editMateri");
-    if (editData) {
-      try {
-        const materiData = JSON.parse(editData);
-        setKategori(materiData.kategori);
-        setMateri(materiData.materi);
+    const loadEditData = async () => {
+      const stateData = location.state;
+      
+      if (stateData && stateData.kumpulan_soal_id) {
+        // Edit mode
         setIsEditMode(true);
-
-        // Load soal yang sudah ada
-        const allSoal = JSON.parse(localStorage.getItem("soal")) || {};
-        const existingSoal = allSoal[materiData.materi] || [];
+        setKumpulanSoalId(stateData.kumpulan_soal_id);
         
-        if (existingSoal.length > 0) {
-          // Normalize soal structure untuk edit
-          const normalizedSoal = existingSoal.map(s => ({
-            ...s,
-            // Ensure jawaban structure is correct
-            jawaban: s.jenis === "isian" && !Array.isArray(s.jawaban) && s.jawaban
-              ? [s.jawaban]
-              : s.jawaban || (s.jenis === "isian" ? [""] : ""),
-            opsi: s.opsi || [],
-            jenis: s.jenis || "pilihan_ganda",
-            gambar: s.gambar || null // Preserve gambar base64
-          }));
-          
-          console.log("📝 Edit mode - Loaded soal:", normalizedSoal);
-          console.log("🖼️ Gambar loaded:", normalizedSoal.filter(s => s.gambar).length, "soal memiliki gambar");
-          setSoalList(normalizedSoal);
-          setJumlahSoal(normalizedSoal.length);
-        }
+        console.log("📝 Loading edit mode data:", {
+          kumpulan_soal_id: stateData.kumpulan_soal_id,
+          materi_id: stateData.materi_id,
+          materi_id_type: typeof stateData.materi_id,
+          kategori_id: stateData.kategori_id,
+          materi: stateData.materi,
+          kategori: stateData.kategori
+        });
 
-        // Clear sessionStorage setelah load
-        sessionStorage.removeItem("editMateri");
-      } catch (error) {
-        console.error("Error loading edit data:", error);
+        try {
+          // Fetch soal from API
+          const response = await apiService.getSoalByKumpulanSoal(stateData.kumpulan_soal_id);
+          
+          if (response.status === "success" && response.data) {
+            const soalFromAPI = response.data.soal_list || [];
+            const waktuPerSoalFromAPI = response.data.waktu_per_soal || 60;
+            
+            // Set kategori dan materi SETELAH dapat data dari API
+            setKategori(response.data.nama_kategori || stateData.kategori || "");
+            setMateri(response.data.materi_judul || stateData.materi || "");
+            setWaktuPerSoal(waktuPerSoalFromAPI);
+
+            // Transform backend format to frontend format
+            const transformedSoal = soalFromAPI.map((s, idx) => ({
+              id: s.soal_id || idx + 1,
+              soal: s.pertanyaan,
+              pertanyaan: s.pertanyaan,
+              gambar: null,
+              jenis: s.pilihan_a ? "pilihan_ganda" : "isian",
+              opsi: s.pilihan_a ? [s.pilihan_a, s.pilihan_b, s.pilihan_c, s.pilihan_d].filter(Boolean) : [],
+              jawaban: s.jawaban_benar,
+              jawabanHuruf: s.pilihan_a && [s.pilihan_a, s.pilihan_b, s.pilihan_c, s.pilihan_d].indexOf(s.jawaban_benar) >= 0
+                ? String.fromCharCode(65 + [s.pilihan_a, s.pilihan_b, s.pilihan_c, s.pilihan_d].indexOf(s.jawaban_benar))
+                : ""
+            }));
+
+            setSoalList(transformedSoal);
+            setJumlahSoal(transformedSoal.length);
+            console.log("✅ Loaded soal for edit:", transformedSoal.length, "soal");
+          }
+        } catch (error) {
+          console.error("❌ Error loading soal data:", error);
+          alert("Gagal memuat data soal");
+          navigate("/halaman-awal-kreator");
+        }
       }
-    }
-  }, []);
+    };
+
+    loadEditData();
+  }, [location.state, navigate]);
 
   // Handle kategori change
   const handleKategoriChange = (value) => {
@@ -98,7 +124,6 @@ export default function BuatSoal() {
   // generate template soal
   const handleGenerateSoal = () => {
     let newErrors = {};
-    const finalKategori = getFinalKategori();
     if (!kategori) newErrors.kategori = "Kategori wajib dipilih";
     if (kategori === "Lainnya" && !kategoriCustom.trim()) newErrors.kategoriCustom = "Nama kategori wajib diisi";
     if (!materi.trim()) newErrors.materi = "Materi wajib diisi";
@@ -229,7 +254,6 @@ export default function BuatSoal() {
     console.log("🔍 Starting validation...");
     let newErrors = {};
 
-    const finalKategori = getFinalKategori();
     if (!kategori) newErrors.kategori = "Kategori wajib dipilih";
     if (kategori === "Lainnya" && !kategoriCustom.trim()) newErrors.kategoriCustom = "Nama kategori wajib diisi";
     if (!materi.trim()) newErrors.materi = "Materi wajib diisi";
@@ -299,13 +323,6 @@ export default function BuatSoal() {
     return !hasFormErrors && !hasSoalErrors;
   };
 
-  // copy PIN
-  const handleCopyPin = () => {
-    navigator.clipboard.writeText(pinCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   // simpan
   const handleSimpan = async () => {
     console.log("💾 Validating form...");
@@ -345,8 +362,11 @@ export default function BuatSoal() {
       const finalKategori = getFinalKategori();
       console.log("📁 Final kategori:", finalKategori);
 
-      // STEP 1: Create or get kategori via API
+      // STEP 1: Get kategori_id and materi_id
       let kategoriId = null;
+      let materiId = null;
+
+      // Get or create kategori (for both create and edit mode)
       const kategoriResponse = await apiService.createKategori({
         nama_kategori: finalKategori,
         created_by: user.id
@@ -359,22 +379,60 @@ export default function BuatSoal() {
         // Trigger event untuk update Kategori component
         window.dispatchEvent(new Event("customKategoriUpdated"));
       } else {
-        throw new Error(kategoriResponse.message || "Gagal membuat kategori");
+        throw new Error(kategoriResponse.message || "Gagal mendapatkan kategori");
       }
 
-      // STEP 2: Create materi via API
-      const materiResponse = await apiService.createMateri({
-        judul: materi,
-        kategori_id: kategoriId,
-        isi_materi: `Materi ${finalKategori} - ${materi}`
-      }, token);
+      // STEP 2: Handle materi (create or update)
+      if (isEditMode && location.state && location.state.materi_id && 
+          typeof location.state.materi_id === 'number' && location.state.materi_id > 0) {
+        // Edit mode: Try to update existing materi
+        try {
+          console.log("📝 Attempting to update materi ID:", location.state.materi_id);
+          const materiUpdateResponse = await apiService.updateMateri(location.state.materi_id, {
+            judul: materi,
+            kategori_id: kategoriId,
+            isi_materi: `Materi ${finalKategori} - ${materi}`
+          }, token);
 
-      if (materiResponse.status !== "success") {
-        throw new Error(materiResponse.message || "Gagal membuat materi");
+          if (materiUpdateResponse.status === "success") {
+            materiId = location.state.materi_id;
+            console.log("✅ Materi Updated:", materiId);
+          } else {
+            // If update fails, create new materi
+            console.warn("⚠️ Update failed, creating new materi instead");
+            throw new Error("Update materi failed");
+          }
+        } catch (updateError) {
+          console.error("❌ Error updating materi, creating new:", updateError);
+          // Fallback: Create new materi
+          const materiResponse = await apiService.createMateri({
+            judul: materi,
+            kategori_id: kategoriId,
+            isi_materi: `Materi ${finalKategori} - ${materi}`
+          }, token);
+
+          if (materiResponse.status !== "success") {
+            throw new Error(materiResponse.message || "Gagal membuat materi");
+          }
+
+          materiId = materiResponse.data.id;
+          console.log("✅ New Materi Created (fallback):", materiId);
+        }
+      } else {
+        // Create mode: Create new materi
+        const materiResponse = await apiService.createMateri({
+          judul: materi,
+          kategori_id: kategoriId,
+          isi_materi: `Materi ${finalKategori} - ${materi}`
+        }, token);
+
+        if (materiResponse.status !== "success") {
+          throw new Error(materiResponse.message || "Gagal membuat materi");
+        }
+
+        materiId = materiResponse.data.id;
+        console.log("✅ Materi ID:", materiId);
       }
-
-      const materiId = materiResponse.data.id;
-      console.log("✅ Materi ID:", materiId);
 
       // STEP 3: Transform soal to backend format
       const soalListBackend = cleanedSoalList.map(s => ({
@@ -388,23 +446,45 @@ export default function BuatSoal() {
           : (Array.isArray(s.jawaban) ? s.jawaban[0] : s.jawaban)
       }));
 
-      // STEP 4: Create kumpulan_soal with soal_list via API
-      const kumpulanSoalResponse = await apiService.createKumpulanSoal({
-        kategori_id: kategoriId,
-        materi_id: materiId,
-        soal_list: soalListBackend
-      }, token);
+      // STEP 4: Create or Update kumpulan_soal with soal_list via API
+      let kumpulanSoalResponse;
+      let kumpulanSoalIdResult;
 
-      if (kumpulanSoalResponse.status !== "success") {
-        throw new Error(kumpulanSoalResponse.message || "Gagal membuat kumpulan soal");
+      if (isEditMode && kumpulanSoalId) {
+        // Edit mode: Update existing kumpulan_soal
+        kumpulanSoalResponse = await apiService.updateKumpulanSoal(kumpulanSoalId, {
+          kategori_id: kategoriId,
+          materi_id: materiId,
+          soal_list: soalListBackend,
+          waktu_per_soal: waktuPerSoal
+        }, token);
+
+        if (kumpulanSoalResponse.status !== "success") {
+          throw new Error(kumpulanSoalResponse.message || "Gagal memperbarui kumpulan soal");
+        }
+
+        kumpulanSoalIdResult = kumpulanSoalId;
+        console.log("✅ Kumpulan Soal Updated:", kumpulanSoalIdResult);
+      } else {
+        // Create mode: Create new kumpulan_soal
+        kumpulanSoalResponse = await apiService.createKumpulanSoal({
+          kategori_id: kategoriId,
+          materi_id: materiId,
+          soal_list: soalListBackend,
+          waktu_per_soal: waktuPerSoal
+        }, token);
+
+        if (kumpulanSoalResponse.status !== "success") {
+          throw new Error(kumpulanSoalResponse.message || "Gagal membuat kumpulan soal");
+        }
+
+        kumpulanSoalIdResult = kumpulanSoalResponse.data.kumpulan_soal_id;
+        console.log("✅ Kumpulan Soal ID:", kumpulanSoalIdResult);
       }
 
-      const kumpulanSoalId = kumpulanSoalResponse.data.kumpulan_soal_id;
-      console.log("✅ Kumpulan Soal ID:", kumpulanSoalId);
       console.log("✅ Jumlah soal:", cleanedSoalList.length);
 
-      // STEP 5: Generate PIN via API (only for new soal)
-      let newPin = "";
+      // STEP 5: Generate PIN via API (only for create mode)
       if (!isEditMode) {
         const now = new Date();
         const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -423,7 +503,7 @@ export default function BuatSoal() {
         const quizData = {
           judul: `Quiz ${finalKategori} - ${materi}`,
           deskripsi: `Kumpulan soal ${finalKategori} tentang ${materi}`,
-          kumpulan_soal_id: kumpulanSoalId,
+          kumpulan_soal_id: kumpulanSoalIdResult,
           user_id: user.id,
           durasi: 30,
           tanggal_mulai: formatMySQLDateTime(now),
@@ -433,25 +513,27 @@ export default function BuatSoal() {
         const pinResponse = await apiService.generatePin(quizData);
         
         if (pinResponse.status === "success") {
-          newPin = pinResponse.data.pin_code;
+          const newPin = pinResponse.data.pin_code;
           console.log("✅ PIN berhasil dibuat:", newPin);
           setPinCode(newPin);
+          
+          setLoading(false);
+          
+          // Scroll ke bawah untuk lihat modal PIN
+          setTimeout(() => {
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+          }, 100);
         } else {
           throw new Error(pinResponse.message || "Gagal generate PIN");
         }
       } else {
-        setPinCode("UPDATED");
+        // Edit mode: tampilkan popup sukses
+        console.log("✅ Soal berhasil diperbarui!");
+        setLoading(false);
+        
+        // Tampilkan popup edit sukses
+        setShowEditSuccess(true);
       }
-
-      console.log("✅ Semua data berhasil disimpan ke backend!");
-      console.log("✅ Data akan tersedia di PHPMyAdmin");
-      
-      setLoading(false);
-      
-      // Scroll ke bawah untuk lihat modal PIN
-      setTimeout(() => {
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-      }, 100);
 
     } catch (error) {
       console.error("❌ Error saat menyimpan:", error);
@@ -469,26 +551,22 @@ export default function BuatSoal() {
         <div className="absolute top-1/2 left-1/3 w-72 h-72 bg-green-300 rounded-full opacity-15 blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
       </div>
 
-      {/* Header */}
-      <div className="bg-white/80 backdrop-blur-sm shadow-lg sticky top-0 z-20 border-b-2 border-orange-200">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+      <div className="flex-1 flex flex-col relative z-10">
+        {/* Header - Same style as Leaderboard */}
+        <div className="py-6 flex items-center justify-center">
           <button
             onClick={() => navigate(-1)}
-            className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-orange-50 rounded-xl transition-all font-semibold text-gray-700 border-2 border-orange-200 shadow-md hover:shadow-lg"
+            className="absolute top-6 left-6 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-xl hover:bg-white hover:shadow-lg transition-all font-semibold text-gray-700 border-2 border-orange-200"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Kembali
+            ← Kembali
           </button>
-          <h1 className="text-xl md:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-yellow-600">
+
+          <h1 className="text-3xl md:text-4xl font-bold text-center bg-gradient-to-r from-orange-600 to-yellow-600 bg-clip-text text-transparent">
             {isEditMode ? "✏️ Edit Soal" : "✨ Buat Soal Versi Kamu"}
           </h1>
-          <div className="w-24"></div>
         </div>
-      </div>
 
-      <div className="p-4 md:p-6 max-w-5xl mx-auto flex-1 w-full relative z-10">
+        <div className="p-4 md:p-6 max-w-5xl mx-auto flex-1 w-full">
 
       {/* Card Form */}
       <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-2xl p-6 md:p-8 mb-6 border-2 border-orange-200">
@@ -506,10 +584,7 @@ export default function BuatSoal() {
             <select
               value={kategori}
               onChange={(e) => handleKategoriChange(e.target.value)}
-              disabled={isEditMode}
-              className={`border-2 p-3 rounded-lg w-full transition-all ${
-                isEditMode ? "bg-gray-100 cursor-not-allowed" : "hover:border-blue-400"
-              } ${
+              className={`border-2 p-3 rounded-lg w-full transition-all hover:border-blue-400 ${
                 errors.kategori
                   ? "border-red-500 focus:ring-2 focus:ring-red-200"
                   : "border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
@@ -572,10 +647,7 @@ export default function BuatSoal() {
               type="text"
               value={materi}
               onChange={(e) => setMateri(e.target.value)}
-              disabled={isEditMode}
-              className={`border-2 p-3 rounded-lg w-full transition-all ${
-                isEditMode ? "bg-gray-100 cursor-not-allowed" : "hover:border-blue-400"
-              } ${
+              className={`border-2 p-3 rounded-lg w-full transition-all hover:border-blue-400 ${
                 errors.materi
                   ? "border-red-500 focus:ring-2 focus:ring-red-200"
                   : "border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
@@ -659,6 +731,82 @@ export default function BuatSoal() {
             </p>
           </div>
         )}
+
+        {/* Waktu per soal */}
+        <div className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-xl p-6 border-2 border-orange-200">
+          <label className="block font-semibold text-gray-800 mb-3 text-lg">
+            ⏱️ Waktu Per Soal (detik)
+          </label>
+          <div className="flex flex-col md:flex-row gap-3 items-stretch">
+            <div className="relative">
+              <input
+                type="number"
+                min="10"
+                max="300"
+                value={waktuPerSoal}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value) || 60;
+                  if (value >= 10 && value <= 300) {
+                    setWaktuPerSoal(value);
+                  }
+                }}
+                className="border-2 border-orange-300 p-3 rounded-lg w-full md:w-48 text-lg font-bold focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all"
+              />
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setWaktuPerSoal(30)}
+                className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                  waktuPerSoal === 30
+                    ? "bg-orange-500 text-white shadow-lg"
+                    : "bg-white border-2 border-orange-300 text-orange-700 hover:bg-orange-100"
+                }`}
+              >
+                30 detik
+              </button>
+              <button
+                type="button"
+                onClick={() => setWaktuPerSoal(60)}
+                className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                  waktuPerSoal === 60
+                    ? "bg-orange-500 text-white shadow-lg"
+                    : "bg-white border-2 border-orange-300 text-orange-700 hover:bg-orange-100"
+                }`}
+              >
+                60 detik
+              </button>
+              <button
+                type="button"
+                onClick={() => setWaktuPerSoal(90)}
+                className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                  waktuPerSoal === 90
+                    ? "bg-orange-500 text-white shadow-lg"
+                    : "bg-white border-2 border-orange-300 text-orange-700 hover:bg-orange-100"
+                }`}
+              >
+                90 detik
+              </button>
+              <button
+                type="button"
+                onClick={() => setWaktuPerSoal(120)}
+                className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                  waktuPerSoal === 120
+                    ? "bg-orange-500 text-white shadow-lg"
+                    : "bg-white border-2 border-orange-300 text-orange-700 hover:bg-orange-100"
+                }`}
+              >
+                120 detik
+              </button>
+            </div>
+          </div>
+          <p className="text-sm text-gray-600 mt-3 flex items-center gap-2">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+            Peserta akan memiliki waktu ini untuk menjawab setiap soal
+          </p>
+        </div>
       </div>
 
       {/* Form soal */}
@@ -676,6 +824,51 @@ export default function BuatSoal() {
           handleJawabanChange={handleJawabanChange}
         />
       ))}
+
+      {/* Tombol Tambah/Kurangi Soal (untuk edit mode) */}
+      {isEditMode && soalList.length > 0 && (
+        <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6 mb-6 border-2 border-blue-200">
+          <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+            <div className="flex-1">
+              <h3 className="font-bold text-lg text-gray-800 mb-2">✏️ Edit Jumlah Soal</h3>
+              <p className="text-sm text-gray-600">
+                Saat ini ada <span className="font-bold text-blue-600">{soalList.length} soal</span>. 
+                Anda bisa menambah atau menghapus soal sesuai kebutuhan.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  const newSoal = {
+                    id: soalList.length + 1,
+                    soal: "",
+                    gambar: null,
+                    jenis: "pilihan_ganda",
+                    opsi: ["", ""],
+                    jawaban: "",
+                    jawabanHuruf: "",
+                  };
+                  setSoalList([...soalList, newSoal]);
+                  console.log("➕ Menambah soal baru");
+                }}
+                className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all transform hover:scale-105 flex items-center gap-2"
+              >
+                <span className="text-xl">➕</span>
+                Tambah Soal
+              </button>
+              {soalList.length > 1 && (
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="px-6 py-3 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all transform hover:scale-105 flex items-center gap-2"
+                >
+                  <span className="text-xl">➖</span>
+                  Hapus Soal Terakhir
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tombol simpan */}
       {soalList.length > 0 && !pinCode && (
@@ -715,83 +908,40 @@ export default function BuatSoal() {
         </div>
       )}
 
-      {/* PIN Display atau Success Message */}
+      {/* Success Popup - Create Mode */}
       {pinCode && !isEditMode && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 transform animate-bounce-in">
-            <div className="text-center">
-              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-5xl">🎉</span>
-              </div>
-              <h2 className="text-3xl font-bold text-gray-800 mb-2">
-                Soal Berhasil Dibuat!
-              </h2>
-              <p className="text-gray-600 mb-6">
-                Quiz Anda telah berhasil dibuat dan siap digunakan
-              </p>
-              
-              <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-6 mb-6 border-2 border-green-300">
-                <p className="text-sm text-gray-700 font-semibold mb-3">🔑 PIN Quiz Anda:</p>
-                <div className="flex items-center justify-center gap-3 mb-4">
-                  <div className="bg-white px-6 py-4 rounded-xl border-2 border-green-500 shadow-lg">
-                    <span className="text-4xl font-mono font-bold text-green-600 tracking-widest">
-                      {pinCode}
-                    </span>
-                  </div>
-                  <button
-                    onClick={handleCopyPin}
-                    className="p-3 bg-green-500 hover:bg-green-600 text-white rounded-xl transition-all transform hover:scale-110 shadow-lg"
-                    title="Copy PIN"
-                  >
-                    {copied ? <Check className="h-6 w-6" /> : <Copy className="h-6 w-6" />}
-                  </button>
-                </div>
-                {copied && (
-                  <p className="text-sm text-green-600 font-semibold animate-pulse">
-                    ✓ PIN berhasil disalin!
-                  </p>
-                )}
-                <p className="text-xs text-gray-600 mt-2">
-                  📱 Bagikan PIN ini kepada peserta untuk mengikuti quiz
-                </p>
-              </div>
-              
-              <button
-                onClick={() => navigate("/halaman-awal-kreator")}
-                className="w-full px-6 py-4 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-bold rounded-xl shadow-lg transition-all transform hover:scale-105"
-              >
-                Kembali ke Halaman Utama
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {pinCode && isEditMode && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 transform animate-bounce-in">
-            <div className="text-center">
-              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-5xl">✅</span>
-              </div>
-              <h2 className="text-3xl font-bold text-gray-800 mb-4">
-                Soal Berhasil Diperbarui!
-              </h2>
-              <p className="text-gray-600 mb-6">
-                Perubahan soal telah disimpan dengan sukses
-              </p>
-              <button
-                onClick={() => navigate("/halaman-awal-kreator")}
-                className="w-full px-6 py-4 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-bold rounded-xl shadow-lg transition-all transform hover:scale-105"
-              >
-                Kembali ke Halaman Utama
-              </button>
-            </div>
-          </div>
-        </div>
+        <BuatSoalBerhasil 
+          pinCode={pinCode} 
+          onClose={() => setPinCode("")}
+          isEdit={false}
+        />
       )}
 
+      {/* Success Popup - Edit Mode */}
+      {showEditSuccess && (
+        <EditSoalBerhasil 
+          onClose={() => {
+            setShowEditSuccess(false);
+            navigate("/halaman-awal-kreator");
+          }}
+        />
+      )}
+
+      {/* Konfirmasi Hapus Soal Terakhir */}
+      {showDeleteConfirm && (
+        <HapusSoalTerakhirPopup 
+          nomorSoal={soalList.length}
+          onConfirm={() => {
+            setSoalList(soalList.slice(0, -1));
+            setShowDeleteConfirm(false);
+            console.log("➖ Menghapus soal terakhir");
+          }}
+          onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
       </div>
+      </div>
+
       <Footer />
     </div>
   );

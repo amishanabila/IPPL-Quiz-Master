@@ -84,7 +84,7 @@ export default function Leaderboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-yellow-300 via-yellow-200 to-orange-200 relative overflow-hidden">
+    <div className="flex flex-col min-h-screen bg-gradient-to-br from-yellow-300 via-yellow-200 to-orange-200 relative overflow-hidden">
       {/* Animated Background Circles */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 left-10 w-64 h-64 bg-orange-300 rounded-full opacity-20 blur-3xl animate-pulse"></div>
@@ -92,9 +92,9 @@ export default function Leaderboard() {
         <div className="absolute top-1/2 left-1/3 w-72 h-72 bg-green-300 rounded-full opacity-15 blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
       </div>
 
-      <div className="relative z-10">
+      <div className="flex-1 flex flex-col relative z-10">
         {/* Header with Back Button - Same style as Profil */}
-        <div className="relative py-6 flex items-center justify-center">
+        <div className="py-6 flex items-center justify-center">
           <button
             onClick={() => navigate("/halaman-awal-kreator")}
             className="absolute top-6 left-6 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-xl hover:bg-white hover:shadow-lg transition-all font-semibold text-gray-700 border-2 border-orange-200"
@@ -233,7 +233,9 @@ export default function Leaderboard() {
                               🎯 Jawaban Benar: <span className="text-green-600 font-bold">{item.jawaban_benar || '-'}</span>
                             </span>
                             <span className="text-gray-600 font-semibold">
-                              ⏱️ Waktu: <span className="text-blue-600 font-bold">{item.waktu_selesai || '-'}</span>
+                              ⏱️ Waktu: <span className="text-blue-600 font-bold">
+                                {item.waktu_pengerjaan ? `${Math.floor(item.waktu_pengerjaan / 60)}:${String(item.waktu_pengerjaan % 60).padStart(2, '0')}` : '-'}
+                              </span>
                             </span>
                           </div>
                         )}
@@ -245,9 +247,9 @@ export default function Leaderboard() {
             </div>
           )}
         </div>
-
-        <Footer />
       </div>
+
+      <Footer />
 
       {/* Reset Confirmation Popup */}
       {showResetConfirm && (

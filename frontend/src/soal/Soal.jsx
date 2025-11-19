@@ -24,9 +24,9 @@ export default function Soal() {
   const [showConfirmPopup, setShowConfirmPopup] = useState(false);
   const soalAktif = soalListRandom[currentIndex];
 
-  // --- TIMER GLOBAL 60 DETIK ---
-  const TOTAL_TIME = 60;
-  const [timeLeft, setTimeLeft] = useState(TOTAL_TIME);
+  // --- TIMER GLOBAL (Dynamic dari kreator) ---
+  const [TOTAL_TIME, setTotalTime] = useState(60); // Default 60 detik
+  const [timeLeft, setTimeLeft] = useState(60);
 
   // Load soal from API on mount
   useEffect(() => {
@@ -36,91 +36,133 @@ export default function Soal() {
         console.log("🔍 Location state:", location.state);
         console.log("🔍 URL slug:", slug);
         
-        // Get materi data from location state OR fetch from API using slug
         const stateData = location.state;
-        let materiId = stateData?.materi_id;
         
-        // If no state, fetch materi list and find matching materi by judul
-        if (!materiId) {
-          console.log("⚠️ No materi_id in state, fetching from API...");
-          try {
-            const materiResponse = await apiService.getMateri();
-            if (materiResponse.status === "success" && materiResponse.data) {
-              const allMateri = materiResponse.data;
-              const matchingMateri = allMateri.find(m => {
-                const materiSlugFromDb = m.judul.toLowerCase().replace(/\s+/g, '-');
-                return materiSlugFromDb === slug.toLowerCase();
-              });
+        // Check if this is a quiz flow (with kumpulan_soal_id from PIN validation)
+        if (stateData?.quizData?.kumpulan_soal_id) {
+          const kumpulanSoalId = stateData.quizData.kumpulan_soal_id;
+          console.log("🎯 Quiz flow detected with kumpulan_soal_id:", kumpulanSoalId);
+          
+          setMateri({
+            materi: stateData.quizData.judul || stateData.quizData.kategori,
+            kategori: stateData.quizData.kategori || "Quiz"
+          });
+          
+          // Fetch soal by kumpulan_soal_id
+          const response = await apiService.getSoalByKumpulanSoal(kumpulanSoalId);
+          console.log("📦 Quiz API Response:", response);
+          
+          if (response.status === "success" && response.data && response.data.soal_list) {
+            const soalFromAPI = response.data.soal_list;
+            const waktuPerSoal = response.data.waktu_per_soal || 60;
+            
+            console.log("✅ Loaded quiz soal from API:", soalFromAPI.length);
+            console.log("⏱️ Waktu per soal:", waktuPerSoal, "detik");
+            
+            // Set timer dari kreator
+            setTotalTime(waktuPerSoal);
+            setTimeLeft(waktuPerSoal);
+            
+            if (soalFromAPI.length > 0) {
+              // Transform backend format to frontend format and shuffle
+              const transformedSoal = soalFromAPI.map((s, idx) => ({
+                id: s.soal_id || idx,
+                soal: s.pertanyaan,
+                pertanyaan: s.pertanyaan,
+                opsi: [s.pilihan_a, s.pilihan_b, s.pilihan_c, s.pilihan_d].filter(Boolean),
+                jawaban: s.jawaban_benar,
+                jenis: "pilihan_ganda",
+                gambar: null
+              }));
               
-              if (matchingMateri) {
-                materiId = matchingMateri.materi_id;
-                console.log("✅ Found matching materi:", matchingMateri);
-                setMateri({
-                  materi: matchingMateri.judul,
-                  kategori: matchingMateri.nama_kategori || "Kategori"
-                });
-              } else {
-                console.error("❌ Materi tidak ditemukan dengan slug:", slug);
-                setLoading(false);
-                return;
-              }
+              // Shuffle soal
+              const shuffled = transformedSoal.sort(() => Math.random() - 0.5);
+              console.log("✅ Quiz soal shuffled:", shuffled.length);
+              setSoalListRandom(shuffled);
             }
-          } catch (err) {
-            console.error("❌ Error fetching materi:", err);
+          } else {
+            console.log("❌ Tidak ada soal quiz ditemukan");
+          }
+        } 
+        // Materi flow (original flow with materi_id)
+        else {
+          let materiId = stateData?.materi_id;
+          
+          // If no state, fetch materi list and find matching materi by judul
+          if (!materiId) {
+            console.log("⚠️ No materi_id in state, fetching from API...");
+            try {
+              const materiResponse = await apiService.getMateri();
+              if (materiResponse.status === "success" && materiResponse.data) {
+                const allMateri = materiResponse.data;
+                const matchingMateri = allMateri.find(m => {
+                  const materiSlugFromDb = m.judul.toLowerCase().replace(/\s+/g, '-');
+                  return materiSlugFromDb === slug.toLowerCase();
+                });
+                
+                if (matchingMateri) {
+                  materiId = matchingMateri.materi_id;
+                  console.log("✅ Found matching materi:", matchingMateri);
+                  setMateri({
+                    materi: matchingMateri.judul,
+                    kategori: matchingMateri.nama_kategori || "Kategori"
+                  });
+                } else {
+                  console.error("❌ Materi tidak ditemukan dengan slug:", slug);
+                  setLoading(false);
+                  return;
+                }
+              }
+            } catch (err) {
+              console.error("❌ Error fetching materi:", err);
+              setLoading(false);
+              return;
+            }
+          } else {
+            console.log("✅ Using materi_id from state:", materiId);
+            setMateri({
+              materi: stateData.materi,
+              kategori: stateData.kategori
+            });
+          }
+
+          if (!materiId) {
+            console.error("❌ Materi ID tidak ditemukan");
             setLoading(false);
             return;
           }
-        } else {
-          console.log("✅ Using materi_id from state:", materiId);
-          setMateri({
-            materi: stateData.materi,
-            kategori: stateData.kategori
-          });
-        }
 
-        if (!materiId) {
-          console.error("❌ Materi ID tidak ditemukan");
-          setLoading(false);
-          return;
-        }
-
-        // Fetch soal from API
-        console.log("🔍 Fetching soal for materi_id:", materiId);
-        const response = await apiService.getSoalByMateri(materiId);
-        console.log("📦 API Response:", response);
-        console.log("📦 Response data:", response.data);
-        console.log("📦 Soal list:", response.data?.soal_list);
-        
-        if (response.status === "success" && response.data && response.data.soal_list) {
-          const soalFromAPI = response.data.soal_list;
-          console.log("✅ Loaded soal from API:", soalFromAPI.length);
-          console.log("✅ First soal:", soalFromAPI[0]);
+          // Fetch soal from API by materi_id
+          console.log("🔍 Fetching soal for materi_id:", materiId);
+          const response = await apiService.getSoalByMateri(materiId);
+          console.log("📦 Materi API Response:", response);
           
-          if (soalFromAPI.length > 0) {
-            // Transform backend format to frontend format and shuffle
-            const transformedSoal = soalFromAPI.map((s, idx) => ({
-              id: s.soal_id || idx,
-              soal: s.pertanyaan,  // ✅ FIXED: use 'soal' field for consistency
-              pertanyaan: s.pertanyaan,
-              opsi: [s.pilihan_a, s.pilihan_b, s.pilihan_c, s.pilihan_d].filter(Boolean),
-              jawaban: s.jawaban_benar,
-              jenis: "pilihan_ganda",
-              gambar: null // TODO: Add gambar support
-            }));
+          if (response.status === "success" && response.data && response.data.soal_list) {
+            const soalFromAPI = response.data.soal_list;
+            console.log("✅ Loaded soal from API:", soalFromAPI.length);
             
-            // Shuffle soal
-            const shuffled = transformedSoal.sort(() => Math.random() - 0.5);
-            console.log("✅ Soal shuffled:", shuffled.length);
-            console.log("✅ Shuffled soal:", shuffled);
-            setSoalListRandom(shuffled);
-            console.log("✅ State soalListRandom updated");
+            if (soalFromAPI.length > 0) {
+              // Transform backend format to frontend format and shuffle
+              const transformedSoal = soalFromAPI.map((s, idx) => ({
+                id: s.soal_id || idx,
+                soal: s.pertanyaan,
+                pertanyaan: s.pertanyaan,
+                opsi: [s.pilihan_a, s.pilihan_b, s.pilihan_c, s.pilihan_d].filter(Boolean),
+                jawaban: s.jawaban_benar,
+                jenis: "pilihan_ganda",
+                gambar: null
+              }));
+              
+              // Shuffle soal
+              const shuffled = transformedSoal.sort(() => Math.random() - 0.5);
+              console.log("✅ Soal shuffled:", shuffled.length);
+              setSoalListRandom(shuffled);
+            } else {
+              console.log("❌ soalFromAPI length is 0");
+            }
           } else {
-            console.log("❌ soalFromAPI length is 0");
+            console.log("❌ Tidak ada soal ditemukan");
           }
-        } else {
-          console.log("❌ Tidak ada soal ditemukan");
-          console.log("❌ Response status:", response.status);
-          console.log("❌ Response data:", response.data);
         }
       } catch (error) {
         console.error("❌ Error loading soal:", error);
@@ -137,16 +179,8 @@ export default function Soal() {
     if (soalListRandom.length === 0 || loading) return;
 
     if (timeLeft <= 0) {
-      localStorage.setItem(
-        "hasilQuiz",
-        JSON.stringify({
-          materi: materiSlug,
-          kategori: materi?.kategori,
-          soalList: soalListRandom,
-          jawabanUser,
-        })
-      );
-      navigate("/hasil-akhir");
+      // Time's up - submit quiz
+      handleSelesai();
       return;
     }
 
@@ -170,23 +204,97 @@ export default function Soal() {
   const handleNext = () => {
     if (currentIndex < soalListRandom.length - 1) {
       setCurrentIndex((prev) => prev + 1);
+      // Reset timer untuk soal berikutnya
+      setTimeLeft(TOTAL_TIME);
     } else {
       // Soal terakhir, tampilkan popup konfirmasi
       setShowConfirmPopup(true);
     }
   };
 
-  const handleSelesai = () => {
-    localStorage.setItem(
-      "hasilQuiz",
-      JSON.stringify({
-        materi: materiSlug,
-        kategori: materi?.kategori,
-        soalList: soalListRandom,
-        jawabanUser,
-      })
-    );
-    navigate("/hasil-akhir");
+  const handleSelesai = async () => {
+    try {
+      // Calculate results
+      const benar = soalListRandom.filter((soal) => {
+        if (soal.jenis === "pilihan_ganda") return jawabanUser[soal.id] === soal.jawaban;
+        if (soal.jenis === "isian" && Array.isArray(soal.jawaban)) {
+          const userAnswer = (jawabanUser[soal.id] || "").trim().toLowerCase();
+          return soal.jawaban.some(jawab => jawab.trim().toLowerCase() === userAnswer);
+        }
+        return jawabanUser[soal.id]?.trim() === (soal.jawaban?.trim() || "");
+      }).length;
+
+      // Hitung waktu pengerjaan dalam detik
+      const waktuPengerjaanDetik = TOTAL_TIME - timeLeft;
+      
+      // Get data from location.state
+      const nama_peserta = location.state?.nama || 'Anonymous';
+      const pin_code = location.state?.pin;
+      const quizData = location.state?.quizData;
+      const kumpulan_soal_id = quizData?.kumpulan_soal_id;
+
+      if (kumpulan_soal_id) {
+        // Build jawaban detail array
+        const jawabanDetail = soalListRandom.map((soal) => {
+          const userAnswer = jawabanUser[soal.id] || '';
+          let isCorrect = false;
+          
+          if (soal.jenis === "pilihan_ganda") {
+            isCorrect = userAnswer === soal.jawaban;
+          } else if (soal.jenis === "isian" && Array.isArray(soal.jawaban)) {
+            isCorrect = soal.jawaban.some(jawab => 
+              jawab.trim().toLowerCase() === userAnswer.trim().toLowerCase()
+            );
+          } else {
+            isCorrect = userAnswer.trim() === (soal.jawaban?.trim() || "");
+          }
+          
+          return {
+            soal_id: soal.id,
+            jawaban: userAnswer,
+            is_correct: isCorrect
+          };
+        });
+
+        const submitData = {
+          nama_peserta,
+          kumpulan_soal_id,
+          skor: Math.round((benar / soalListRandom.length) * 100),
+          jawaban_benar: benar,
+          total_soal: soalListRandom.length,
+          waktu_pengerjaan: waktuPengerjaanDetik,
+          pin_code,
+          jawaban_detail: jawabanDetail
+        };
+
+        await apiService.submitQuiz(submitData);
+      }
+
+      // Navigate with results
+      navigate("/hasil-akhir", {
+        state: {
+          hasil: {
+            materi: materiSlug,
+            kategori: materi?.kategori,
+            soalList: soalListRandom,
+            jawabanUser,
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error submitting quiz:', error);
+      // Still navigate even if submission fails
+      navigate("/hasil-akhir", {
+        state: {
+          hasil: {
+            materi: materiSlug,
+            kategori: materi?.kategori,
+            soalList: soalListRandom,
+            jawabanUser,
+          }
+        }
+      });
+    }
   };
 
   const handlePrev = () => {
@@ -204,7 +312,11 @@ export default function Soal() {
 
   // Show empty state if no soal
   if (soalListRandom.length === 0) {
-    return <SoalBelumTersedia />;
+    return (
+      <div className="relative min-h-screen bg-gradient-to-br from-yellow-300 via-yellow-200 to-orange-200 flex items-center justify-center p-6">
+        <SoalBelumTersedia />
+      </div>
+    );
   }
 
   return (

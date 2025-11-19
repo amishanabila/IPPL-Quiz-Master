@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
     nama VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
-    role ENUM('admin', 'user') DEFAULT 'user',
+    role ENUM('admin', 'kreator') DEFAULT 'kreator',
     telepon VARCHAR(20),
     foto LONGBLOB,
     verification_token VARCHAR(512),
@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS kumpulan_soal (
     created_by INT,
     updated_by INT,
     jumlah_soal INT DEFAULT 0,
+    waktu_per_soal INT DEFAULT 60 COMMENT 'Waktu per soal dalam detik (default 60 detik)',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (kategori_id) REFERENCES kategori(id) ON DELETE CASCADE,
@@ -94,31 +95,16 @@ CREATE TABLE IF NOT EXISTS quiz (
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Quiz Attempts table (rename to quiz_attempts for consistency)
-CREATE TABLE IF NOT EXISTS quiz_attempts (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    quiz_id INT NOT NULL,
-    user_id INT NOT NULL,
-    start_time DATETIME NOT NULL,
-    end_time DATETIME,
-    score DECIMAL(5,2),
-    status ENUM('in_progress', 'completed', 'timed_out') DEFAULT 'in_progress',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (quiz_id) REFERENCES quiz(quiz_id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- User Answers table
+-- User Answers table (untuk tracking jawaban peserta)
 CREATE TABLE IF NOT EXISTS user_answers (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    attempt_id INT NOT NULL,
+    hasil_id INT COMMENT 'Reference to hasil_quiz for peserta results',
     soal_id INT NOT NULL,
     jawaban TEXT NOT NULL,
     is_correct BOOLEAN,
     points_earned DECIMAL(5,2) DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (attempt_id) REFERENCES quiz_attempts(id) ON DELETE CASCADE,
+    FOREIGN KEY (hasil_id) REFERENCES hasil_quiz(hasil_id) ON DELETE CASCADE,
     FOREIGN KEY (soal_id) REFERENCES soal(soal_id) ON DELETE CASCADE
 );
 
@@ -130,7 +116,7 @@ CREATE TABLE IF NOT EXISTS hasil_quiz (
     skor INT DEFAULT 0,
     jawaban_benar INT DEFAULT 0,
     total_soal INT DEFAULT 0,
-    waktu_selesai TIME,
+    waktu_pengerjaan INT COMMENT 'Total waktu pengerjaan dalam detik',
     pin_code CHAR(6),
     completed_at DATETIME,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -290,133 +276,43 @@ BEGIN
     SELECT ROW_COUNT() as affected_rows;
 END //
 
--- Procedure: Create new quiz attempt
-CREATE PROCEDURE create_quiz_attempt(
-    IN p_quiz_id INT,
-    IN p_user_id INT
+-- Procedure: Get soal by kumpulan_soal_id (for quiz flow)
+CREATE PROCEDURE get_soal_by_kumpulan(
+    IN p_kumpulan_soal_id INT
 )
 BEGIN
-    DECLARE quiz_duration INT;
-    
-    -- Get quiz duration
-    SELECT durasi INTO quiz_duration FROM quiz WHERE quiz_id = p_quiz_id;
-    
-    -- Create attempt
-    INSERT INTO quiz_attempts (quiz_id, user_id, start_time, status)
-    VALUES (p_quiz_id, p_user_id, NOW(), 'in_progress');
-    
-    -- Return attempt details
+    -- Return kumpulan_soal info
     SELECT 
-        qa.id as attempt_id,
-        q.judul,
-        q.durasi,
-        qa.start_time,
-        DATE_ADD(qa.start_time, INTERVAL q.durasi MINUTE) as expected_end_time
-    FROM quiz_attempts qa
-    JOIN quiz q ON qa.quiz_id = q.quiz_id
-    WHERE qa.id = LAST_INSERT_ID();
-END //
-
--- Procedure: Submit quiz answer (mendukung pilihan ganda, isian, dan essay)
-CREATE PROCEDURE submit_quiz_answer(
-    IN p_attempt_id INT,
-    IN p_soal_id INT,
-    IN p_jawaban TEXT
-)
-BEGIN
-    DECLARE v_is_correct BOOLEAN;
-    DECLARE v_points DECIMAL(5,2) DEFAULT 1;
-    DECLARE v_correct_answer TEXT;
+        ks.kumpulan_soal_id,
+        ks.judul,
+        ks.kategori_id,
+        k.nama_kategori,
+        ks.materi_id,
+        m.judul as materi_judul,
+        ks.jumlah_soal,
+        ks.waktu_per_soal,
+        ks.created_at
+    FROM kumpulan_soal ks 
+    JOIN kategori k ON ks.kategori_id = k.id
+    LEFT JOIN materi m ON ks.materi_id = m.materi_id
+    WHERE ks.kumpulan_soal_id = p_kumpulan_soal_id;
     
-    -- Get correct answer
-    SELECT jawaban_benar INTO v_correct_answer
-    FROM soal WHERE soal_id = p_soal_id;
-    
-    -- Check answer correctness (case-insensitive comparison)
-    SET v_is_correct = (LOWER(TRIM(v_correct_answer)) = LOWER(TRIM(p_jawaban)));
-    
-    -- Calculate points
-    SET v_points = IF(v_is_correct, 1, 0);
-    
-    -- Insert or update answer
-    INSERT INTO user_answers (attempt_id, soal_id, jawaban, is_correct, points_earned)
-    VALUES (p_attempt_id, p_soal_id, p_jawaban, v_is_correct, v_points)
-    ON DUPLICATE KEY UPDATE
-        jawaban = p_jawaban,
-        is_correct = v_is_correct,
-        points_earned = v_points;
-END //
-
--- Procedure: Complete quiz attempt
-CREATE PROCEDURE complete_quiz_attempt(
-    IN p_attempt_id INT
-)
-BEGIN
-    DECLARE total_points DECIMAL(5,2);
-    
-    -- Calculate total score
-    SELECT SUM(points_earned) INTO total_points
-    FROM user_answers
-    WHERE attempt_id = p_attempt_id;
-    
-    -- Update attempt
-    UPDATE quiz_attempts
-    SET 
-        end_time = NOW(),
-        score = total_points,
-        status = 'completed'
-    WHERE id = p_attempt_id;
-    
-    -- Return results
+    -- Return soal list
     SELECT 
-        qa.score,
-        q.judul,
-        COUNT(ua.id) as total_questions,
-        SUM(IF(ua.is_correct, 1, 0)) as correct_answers
-    FROM quiz_attempts qa
-    JOIN quiz q ON qa.quiz_id = q.id
-    LEFT JOIN user_answers ua ON qa.id = ua.attempt_id
-    WHERE qa.id = p_attempt_id
-    GROUP BY qa.id;
+        s.soal_id,
+        s.pertanyaan,
+        s.pilihan_a,
+        s.pilihan_b,
+        s.pilihan_c,
+        s.pilihan_d,
+        s.jawaban_benar,
+        s.created_at
+    FROM soal s
+    WHERE s.kumpulan_soal_id = p_kumpulan_soal_id
+    ORDER BY s.soal_id;
 END //
 
--- Functions
-
--- Function: Calculate user's average score
-CREATE FUNCTION calculate_user_average_score(p_user_id INT)
-RETURNS DECIMAL(5,2)
-DETERMINISTIC
-BEGIN
-    DECLARE avg_score DECIMAL(5,2);
-    
-    SELECT AVG(score) INTO avg_score
-    FROM quiz_attempts
-    WHERE user_id = p_user_id AND status = 'completed';
-    
-    RETURN COALESCE(avg_score, 0);
-END //
-
--- Function: Get user quiz completion rate
-CREATE FUNCTION get_user_completion_rate(p_user_id INT)
-RETURNS DECIMAL(5,2)
-DETERMINISTIC
-BEGIN
-    DECLARE total_attempts INT;
-    DECLARE completed_attempts INT;
-    
-    SELECT 
-        COUNT(*),
-        SUM(IF(status = 'completed', 1, 0))
-    INTO total_attempts, completed_attempts
-    FROM quiz_attempts
-    WHERE user_id = p_user_id;
-    
-    IF total_attempts = 0 THEN
-        RETURN 0;
-    END IF;
-    
-    RETURN (completed_attempts / total_attempts) * 100;
-END //
+-- Functions (No custom functions needed for current implementation)
 
 -- Triggers
 
@@ -472,37 +368,25 @@ WHERE
     q.tanggal_mulai <= NOW() AND
     q.tanggal_selesai >= NOW() //
 
--- View: Quiz Results Summary
-CREATE VIEW v_quiz_results AS
+-- View: Leaderboard Results
+CREATE VIEW v_leaderboard AS
 SELECT 
-    qa.id as attempt_id,
-    q.judul as quiz_judul,
-    u.nama as user_nama,
-    qa.score,
-    qa.start_time,
-    qa.end_time,
-    TIMESTAMPDIFF(MINUTE, qa.start_time, COALESCE(qa.end_time, NOW())) as duration_minutes,
-    qa.status,
-    COUNT(ua.id) as total_questions,
-    SUM(IF(ua.is_correct, 1, 0)) as correct_answers
-FROM quiz_attempts qa
-JOIN quiz q ON qa.quiz_id = q.quiz_id
-JOIN users u ON qa.user_id = u.id
-LEFT JOIN user_answers ua ON qa.id = ua.attempt_id
-GROUP BY qa.id //
-
--- View: User Statistics
-CREATE VIEW v_user_statistics AS
-SELECT 
-    u.id as user_id,
-    u.nama,
-    COUNT(DISTINCT qa.id) as total_attempts,
-    SUM(IF(qa.status = 'completed', 1, 0)) as completed_quizzes,
-    AVG(qa.score) as average_score,
-    MAX(qa.score) as highest_score
-FROM users u
-LEFT JOIN quiz_attempts qa ON u.id = qa.user_id
-GROUP BY u.id //
+    hq.hasil_id,
+    hq.nama_peserta,
+    hq.skor,
+    hq.jawaban_benar,
+    hq.total_soal,
+    hq.waktu_pengerjaan,
+    hq.completed_at,
+    k.nama_kategori as kategori,
+    m.judul as materi,
+    ks.judul as kumpulan_soal_judul
+FROM hasil_quiz hq
+JOIN kumpulan_soal ks ON hq.kumpulan_soal_id = ks.kumpulan_soal_id
+JOIN kategori k ON ks.kategori_id = k.id
+LEFT JOIN materi m ON ks.materi_id = m.materi_id
+WHERE hq.completed_at IS NOT NULL
+ORDER BY hq.skor DESC, hq.waktu_pengerjaan ASC //
 
 DELIMITER ;
 
@@ -517,10 +401,7 @@ CREATE INDEX idx_soal_kumpulan ON soal(kumpulan_soal_id);
 CREATE INDEX idx_quiz_pin ON quiz(pin_code);
 CREATE INDEX idx_quiz_status ON quiz(status);
 CREATE INDEX idx_quiz_tanggal ON quiz(tanggal_mulai, tanggal_selesai);
-CREATE INDEX idx_attempts_quiz ON quiz_attempts(quiz_id);
-CREATE INDEX idx_attempts_user ON quiz_attempts(user_id);
-CREATE INDEX idx_attempts_status ON quiz_attempts(status);
-CREATE INDEX idx_answers_attempt ON user_answers(attempt_id);
+CREATE INDEX idx_answers_hasil ON user_answers(hasil_id);
 CREATE INDEX idx_hasil_kumpulan_soal ON hasil_quiz(kumpulan_soal_id);
 
 -- Insert initial data

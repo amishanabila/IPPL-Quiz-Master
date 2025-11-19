@@ -137,15 +137,22 @@ export default function KumpulanMateri() {
   };
 
   // Handler untuk edit soal
-  const handleEditSoal = (e, materiData) => {
+  const handleEditSoal = async (e, materiData) => {
     e.stopPropagation();
     setOpenMenuIndex(null);
     
-    console.log("⚠️ Edit feature belum tersedia untuk data API");
-    alert("Edit feature sedang dalam pengembangan. Untuk saat ini, Anda bisa membuat soal baru.");
-    // TODO: Implement edit functionality with API
-    // sessionStorage.setItem("editMateri", JSON.stringify(materiData));
-    // navigate("/buat-soal");
+    console.log("📝 Navigating to edit mode with data:", materiData);
+    
+    // Navigate dengan state untuk edit mode
+    navigate("/buat-soal", { 
+      state: { 
+        kumpulan_soal_id: materiData.kumpulan_soal_id,
+        materi_id: materiData.materi_id,
+        kategori_id: materiData.kategori_id,
+        materi: materiData.materi,
+        kategori: materiData.kategori
+      } 
+    });
   };
 
   // Handler untuk hapus soal

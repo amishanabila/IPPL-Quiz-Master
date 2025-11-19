@@ -21,4 +21,7 @@ router.get('/kategori/:kategoriId', soalController.getSoalByKategori);
 // Get soal by materi
 router.get('/materi/:materiId', soalController.getSoalByMateri);
 
+// Get soal by kumpulan_soal_id (for quiz with PIN)
+router.get('/kumpulan-soal/:kumpulanSoalId', soalController.getSoalByKumpulanSoal);
+
 module.exports = router;

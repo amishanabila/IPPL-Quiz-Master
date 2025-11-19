@@ -1,13 +1,13 @@
 import React from "react";
 import Header from "./header/Header";
 import KumpulanMateri from "./materi/KumpulanMateri";
-import BannerBuatSoal from "./buat soal/BannerBuatSoal";
+import BannerBuatSoal from "./Buat Soal/BannerBuatSoal";
 import BannerLeaderboard from "./leaderboard/BannerLeaderboard";
 import Footer from "./footer/Footer";
 
 export default function HalamanAwal() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-yellow-300 via-yellow-200 to-orange-200 relative overflow-hidden">
+    <div className="flex flex-col min-h-screen bg-gradient-to-br from-yellow-300 via-yellow-200 to-orange-200 relative overflow-hidden">
       {/* Animated Background Circles */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 left-10 w-64 h-64 bg-orange-300 rounded-full opacity-20 blur-3xl animate-pulse"></div>
@@ -15,7 +15,7 @@ export default function HalamanAwal() {
         <div className="absolute top-1/2 left-1/3 w-72 h-72 bg-green-300 rounded-full opacity-15 blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
       </div>
       
-      <div className="relative z-10">
+      <div className="flex-1 flex flex-col relative z-10">
         <Header/>
         
         {/* Banner Section - Buat Soal & Leaderboard Side by Side */}
@@ -26,9 +26,12 @@ export default function HalamanAwal() {
           </div>
         </div>
         
-        <KumpulanMateri/>
-        <Footer/>
+        <div className="flex-1">
+          <KumpulanMateri/>
+        </div>
       </div>
+      
+      <Footer/>
     </div>
   );
 }

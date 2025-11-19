@@ -151,25 +151,29 @@ export default function Header() {
 
           {/* Dropdown */}
           <div
-            className={`absolute right-0 mt-[110px] w-40 bg-white backdrop-blur-sm rounded-xl shadow-2xl z-[100] font-semibold border-2 border-orange-200 transition-all duration-200 origin-top ${
+            className={`absolute right-0 mt-[110px] w-48 bg-gradient-to-br from-orange-50 to-yellow-50 backdrop-blur-sm rounded-xl shadow-2xl z-[100] font-semibold border-2 border-orange-300 transition-all duration-200 origin-top ${
               isDropdownOpen
                 ? "opacity-100 translate-y-0 scale-100"
                 : "opacity-0 -translate-y-2 scale-95 pointer-events-none"
             }`}
           >
-            <Link
-              to="/profil"
-              className="block px-4 py-2 text-sm text-gray-700 hover:bg-gradient-to-r hover:from-orange-400 hover:to-yellow-500 hover:text-white transition rounded-lg mx-2 my-1 font-semibold"
-              onClick={() => setIsDropdownOpen(false)}
-            >
-              ⚙️ Pengaturan Akun
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gradient-to-r hover:from-red-400 hover:to-red-500 hover:text-white transition rounded-lg mx-2 my-1 font-semibold"
-            >
-              🚪 Keluar
-            </button>
+            <div className="p-2 space-y-1">
+              <Link
+                to="/profil"
+                className="flex items-center gap-2 px-4 py-3 text-sm text-gray-800 hover:bg-gradient-to-r hover:from-orange-400 hover:to-yellow-500 hover:text-white transition-all duration-200 rounded-lg font-semibold group"
+                onClick={() => setIsDropdownOpen(false)}
+              >
+                <span className="text-lg">⚙️</span>
+                <span>Pengaturan Akun</span>
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 w-full text-left px-4 py-3 text-sm text-gray-800 hover:bg-gradient-to-r hover:from-red-400 hover:to-red-500 hover:text-white transition-all duration-200 rounded-lg font-semibold group"
+              >
+                <span className="text-lg">🚪</span>
+                <span>Keluar</span>
+              </button>
+            </div>
           </div>
         </div>
 

@@ -183,6 +183,11 @@ export const apiService = {
     return await response.json();
   },
 
+  async getSoalByKumpulanSoal(kumpulanSoalId) {
+    const response = await fetch(`${BASE_URL}/soal/kumpulan-soal/${kumpulanSoalId}`);
+    return await response.json();
+  },
+
   // Quiz API calls
   async generatePin(data) {
     const response = await fetch(`${BASE_URL}/quiz/generate-pin`, {
@@ -217,8 +222,8 @@ export const apiService = {
     return await response.json();
   },
 
-  async submitQuiz(hasilId, data) {
-    const response = await fetch(`${BASE_URL}/quiz/submit/${hasilId}`, {
+  async submitQuiz(data) {
+    const response = await fetch(`${BASE_URL}/quiz/submit-result`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

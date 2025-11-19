@@ -10,14 +10,14 @@ exports.getLeaderboard = async (req, res) => {
         k.nama_kategori as kategori,
         ha.skor,
         ha.jawaban_benar,
-        ha.waktu_selesai,
+        ha.waktu_pengerjaan,
         ha.created_at
       FROM hasil_quiz ha
       LEFT JOIN kumpulan_soal ks ON ha.kumpulan_soal_id = ks.kumpulan_soal_id
       LEFT JOIN materi m ON ks.materi_id = m.materi_id
       LEFT JOIN kategori k ON ks.kategori_id = k.id
       WHERE ha.skor IS NOT NULL
-      ORDER BY ha.skor DESC, ha.waktu_selesai ASC
+      ORDER BY ha.skor DESC, ha.waktu_pengerjaan ASC
       LIMIT 100
     `);
 

@@ -14,6 +14,9 @@ router.post('/start', quizController.startQuiz);
 // Submit quiz answers
 router.post('/submit/:hasilId', quizController.submitQuiz);
 
+// Submit quiz result directly (new endpoint)
+router.post('/submit-result', quizController.submitQuizResult);
+
 // Get quiz results
 router.get('/results/:hasilId', quizController.getQuizResults);
 

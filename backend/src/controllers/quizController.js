@@ -235,6 +235,84 @@ const quizController = {
     }
   },
 
+  // Submit quiz result directly (simplified endpoint)
+  async submitQuizResult(req, res) {
+    const connection = await db.getConnection();
+    
+    try {
+      const { nama_peserta, kumpulan_soal_id, skor, jawaban_benar, total_soal, waktu_pengerjaan, pin_code, jawaban_detail } = req.body;
+
+      // Validasi input
+      if (!nama_peserta || !kumpulan_soal_id || skor === undefined) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Data tidak lengkap'
+        });
+      }
+
+      // Start transaction
+      await connection.beginTransaction();
+
+      try {
+        // Insert hasil quiz
+        const [result] = await connection.query(
+          `INSERT INTO hasil_quiz 
+           (nama_peserta, kumpulan_soal_id, skor, jawaban_benar, total_soal, waktu_pengerjaan, pin_code, completed_at) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+          [nama_peserta, kumpulan_soal_id, skor, jawaban_benar, total_soal, waktu_pengerjaan, pin_code]
+        );
+
+        const hasil_id = result.insertId;
+
+        console.log('✅ Quiz result saved to database:', {
+          hasil_id,
+          nama_peserta,
+          skor,
+          jawaban_benar,
+          total_soal
+        });
+
+        // Insert user_answers if provided
+        if (jawaban_detail && Array.isArray(jawaban_detail) && jawaban_detail.length > 0) {
+          for (const jawab of jawaban_detail) {
+            await connection.query(
+              `INSERT INTO user_answers (hasil_id, soal_id, jawaban, is_correct) 
+               VALUES (?, ?, ?, ?)`,
+              [hasil_id, jawab.soal_id, jawab.jawaban, jawab.is_correct]
+            );
+          }
+          console.log('✅ User answers saved:', jawaban_detail.length, 'answers');
+        }
+
+        // Commit transaction
+        await connection.commit();
+
+        res.json({
+          status: 'success',
+          message: 'Hasil quiz berhasil disimpan',
+          data: {
+            hasil_id,
+            skor,
+            jawaban_benar,
+            total_soal
+          }
+        });
+      } catch (error) {
+        // Rollback on error
+        await connection.rollback();
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error submitting quiz result:', error);
+      res.status(500).json({
+        status: 'error',
+        message: 'Terjadi kesalahan saat menyimpan hasil quiz'
+      });
+    } finally {
+      connection.release();
+    }
+  },
+
   // Get quiz results
   async getQuizResults(req, res) {
     try {

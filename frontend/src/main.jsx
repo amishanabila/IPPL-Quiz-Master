@@ -15,7 +15,7 @@ import Profil from "./auth/Profil.jsx";
 import KumpulanMateri from "./materi/KumpulanMateri.jsx";
 import Soal from "./soal/Soal.jsx";
 import LihatSoal from "./soal/LihatSoal.jsx";
-import BuatSoal from "./buat soal/BuatSoal.jsx";       
+import BuatSoal from "./Buat Soal/BuatSoal.jsx";       
 import HasilAkhir from "./hasil akhir/HasilAkhir.jsx";
 import Leaderboard from "./leaderboard/Leaderboard.jsx"; 
 

@@ -184,7 +184,7 @@ export default function EditProfilPopup({ user, profilePhoto, onClose, onSave })
 
           <div className="text-center mb-6">
             <img
-              src={photo || "user.png"}
+              src={photo || "icon/user.png"}
               alt="Profil"
               className="w-32 h-32 rounded-full object-cover border-4 border-yellow-300 mx-auto mb-3"
               onError={(e) => {

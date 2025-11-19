@@ -114,7 +114,6 @@ const materiController = {
         data: {
           id,
           judul,
-          deskripsi,
           kategori_id,
           isi_materi
         }
