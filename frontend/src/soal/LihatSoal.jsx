@@ -37,16 +37,35 @@ export default function LihatSoal() {
           
           if (soalFromAPI.length > 0) {
             // Transform backend format to frontend format
-            const transformedSoal = soalFromAPI.map(s => ({
-              pertanyaan: s.pertanyaan,
-              pilihanA: s.pilihan_a || "",
-              pilihanB: s.pilihan_b || "",
-              pilihanC: s.pilihan_c || "",
-              pilihanD: s.pilihan_d || "",
-              jawabanBenar: s.jawaban_benar || "",
-              jenis: "pilihan_ganda", // Backend only supports pilihan_ganda for now
-              gambar: null // TODO: Add gambar support in backend
-            }));
+            const transformedSoal = soalFromAPI.map(s => {
+              // Determine jenis soal: jika ada pilihan_a dan pilihan_b, maka pilihan_ganda
+              const isPilihanGanda = (s.pilihan_a && s.pilihan_b) ? true : false;
+              const jenisSoal = isPilihanGanda ? "pilihan_ganda" : "isian";
+              
+              // Parse jawaban_benar dan variasi_jawaban untuk isian singkat
+              let jawabanBenar = s.jawaban_benar || "";
+              if (!isPilihanGanda && s.variasi_jawaban) {
+                try {
+                  jawabanBenar = typeof s.variasi_jawaban === 'string' 
+                    ? JSON.parse(s.variasi_jawaban) 
+                    : s.variasi_jawaban;
+                } catch (e) {
+                  console.log('⚠️ Failed to parse variasi_jawaban:', e);
+                  jawabanBenar = Array.isArray(s.jawaban_benar) ? s.jawaban_benar : [s.jawaban_benar];
+                }
+              }
+              
+              return {
+                pertanyaan: s.pertanyaan,
+                pilihanA: s.pilihan_a || "",
+                pilihanB: s.pilihan_b || "",
+                pilihanC: s.pilihan_c || "",
+                pilihanD: s.pilihan_d || "",
+                jawabanBenar: jawabanBenar,
+                jenis: jenisSoal,
+                gambar: s.gambar || null // Load gambar dari backend
+              };
+            });
             
             console.log("📖 Transformed soal:", transformedSoal);
             setSoalList(transformedSoal);
@@ -241,14 +260,14 @@ export default function LihatSoal() {
                           <CheckCircle2 size={20} className="text-green-600 flex-shrink-0 mt-1" />
                           <div className="flex-1">
                             <p className="text-sm font-semibold text-green-700 mb-2">
-                              {jenisSoal === "isian" && Array.isArray(soal.jawaban) 
+                              {jenisSoal === "isian" && Array.isArray(soal.jawabanBenar) 
                                 ? "Jawaban yang Diterima (salah satu):" 
                                 : "Jawaban yang Benar:"}
                             </p>
-                            {Array.isArray(soal.jawaban) ? (
+                            {Array.isArray(soal.jawabanBenar) ? (
                               // Multiple jawaban untuk isian
                               <div className="space-y-1">
-                                {soal.jawaban.map((jawab, idx) => (
+                                {soal.jawabanBenar.map((jawab, idx) => (
                                   <div key={idx} className="flex items-center gap-2">
                                     <span className="w-6 h-6 bg-green-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
                                       {idx + 1}
@@ -260,7 +279,7 @@ export default function LihatSoal() {
                             ) : (
                               // Single jawaban untuk essay atau old format
                               <p className="text-gray-800 whitespace-pre-wrap">
-                                {soal.jawaban}
+                                {soal.jawabanBenar}
                               </p>
                             )}
                           </div>

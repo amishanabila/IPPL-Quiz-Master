@@ -13,6 +13,7 @@ const soalRoutes = require('./src/routes/soalRoutes');
 const quizRoutes = require('./src/routes/quizRoutes');
 const userRoutes = require('./src/routes/userRoutes');
 const leaderboardRoutes = require('./src/routes/leaderboardRoutes');
+const adminRoutes = require('./src/routes/adminRoutes');
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.use('/api/soal', soalRoutes);
 app.use('/api/quiz', quizRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);
+app.use('/api/admin', adminRoutes);
 
 // 404 handler
 app.use((req, res) => {

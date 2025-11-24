@@ -201,14 +201,40 @@ export const apiService = {
   },
 
   async validatePin(pin) {
-    const response = await fetch(`${BASE_URL}/quiz/validate-pin`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ pin }),
-    });
-    return await response.json();
+    try {
+      console.log('🔍 Validating PIN:', pin);
+      console.log('📡 Request URL:', `${BASE_URL}/quiz/validate-pin`);
+      
+      const response = await fetch(`${BASE_URL}/quiz/validate-pin`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ pin }),
+      });
+
+      console.log('📨 Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ 
+          status: 'error', 
+          message: `HTTP error! status: ${response.status}` 
+        }));
+        console.log('❌ Response not OK:', errorData);
+        return errorData;
+      }
+
+      const data = await response.json();
+      console.log('✅ Validate PIN success:', data);
+      return data;
+    } catch (error) {
+      console.error('❌ validatePin error:', error);
+      return {
+        status: 'error',
+        message: 'Tidak dapat terhubung ke server. Pastikan backend sudah running di port 5000.',
+        error: error.message
+      };
+    }
   },
 
   async startQuiz(data) {
@@ -218,6 +244,22 @@ export const apiService = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
+    });
+    return await response.json();
+  },
+
+  async getRemainingTime(sessionId) {
+    const response = await fetch(`${BASE_URL}/quiz/session/${sessionId}/remaining-time`);
+    return await response.json();
+  },
+
+  async updateQuizProgress(sessionId, currentIndex) {
+    const response = await fetch(`${BASE_URL}/quiz/session/${sessionId}/progress`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ current_soal_index: currentIndex }),
     });
     return await response.json();
   },
@@ -239,8 +281,26 @@ export const apiService = {
   },
 
   // Leaderboard API calls
-  async getLeaderboard() {
-    const response = await fetch(`${BASE_URL}/leaderboard`);
+  async getLeaderboard(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.kategori_id) params.append('kategori_id', filters.kategori_id);
+    if (filters.materi_id) params.append('materi_id', filters.materi_id);
+    
+    const url = `${BASE_URL}/leaderboard${params.toString() ? '?' + params.toString() : ''}`;
+    const response = await fetch(url);
+    return await response.json();
+  },
+
+  async getKategoriWithStats() {
+    const response = await fetch(`${BASE_URL}/leaderboard/kategori`);
+    return await response.json();
+  },
+
+  async getMateriByKategori(kategoriId = null) {
+    const url = kategoriId 
+      ? `${BASE_URL}/leaderboard/materi?kategori_id=${kategoriId}`
+      : `${BASE_URL}/leaderboard/materi`;
+    const response = await fetch(url);
     return await response.json();
   },
 

@@ -38,5 +38,19 @@ html, body {
   animation: scaleIn 0.3s ease-out;
 }
 
+/* Timer Circle Animation */
+@keyframes timerPulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.6));
+  }
+  50% {
+    filter: drop-shadow(0 0 16px rgba(239, 68, 68, 0.9));
+  }
+}
+
+.timer-urgent {
+  animation: timerPulse 1s ease-in-out infinite;
+}
+
 
 

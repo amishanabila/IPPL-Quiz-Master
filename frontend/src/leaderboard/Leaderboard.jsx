@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Trophy, Medal, Award, Crown, TrendingUp, Star, RotateCcw } from "lucide-react";
+import { Trophy, Medal, Award, Crown, TrendingUp, Star, RotateCcw, Filter, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Footer from "../footer/Footer";
 import { apiService } from "../services/api";
@@ -11,16 +11,64 @@ export default function Leaderboard() {
   const [error, setError] = useState(null);
   const [resetting, setResetting] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  
+  // Filter states
+  const [kategoriList, setKategoriList] = useState([]);
+  const [materiList, setMateriList] = useState([]);
+  const [selectedKategori, setSelectedKategori] = useState('');
+  const [selectedMateri, setSelectedMateri] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+
+  useEffect(() => {
+    fetchKategoriList();
+    fetchLeaderboardData();
+  }, []);
+
+  useEffect(() => {
+    if (selectedKategori) {
+      fetchMateriList(selectedKategori);
+    } else {
+      setMateriList([]);
+      setSelectedMateri('');
+    }
+  }, [selectedKategori]);
 
   useEffect(() => {
     fetchLeaderboardData();
-  }, []);
+  }, [selectedKategori, selectedMateri]);
+
+  const fetchKategoriList = async () => {
+    try {
+      const response = await apiService.getKategoriWithStats();
+      if (response.status === 'success') {
+        setKategoriList(response.data);
+      }
+    } catch (err) {
+      console.error('Error fetching kategori:', err);
+    }
+  };
+
+  const fetchMateriList = async (kategoriId) => {
+    try {
+      const response = await apiService.getMateriByKategori(kategoriId);
+      if (response.status === 'success') {
+        setMateriList(response.data);
+      }
+    } catch (err) {
+      console.error('Error fetching materi:', err);
+    }
+  };
 
   const fetchLeaderboardData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getLeaderboard();
+      
+      const filters = {};
+      if (selectedKategori) filters.kategori_id = selectedKategori;
+      if (selectedMateri) filters.materi_id = selectedMateri;
+      
+      const response = await apiService.getLeaderboard(filters);
       
       if (response.status === 'success') {
         setLeaderboardData(response.data);
@@ -33,6 +81,11 @@ export default function Leaderboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleClearFilters = () => {
+    setSelectedKategori('');
+    setSelectedMateri('');
   };
 
   const handleResetLeaderboard = async () => {
@@ -117,11 +170,140 @@ export default function Leaderboard() {
         </div>
         
         <div className="container mx-auto px-4 py-8">
+          {/* Filter Section */}
+          <div className="mb-8 bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6 border-2 border-orange-200">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <Filter className="w-5 h-5 text-orange-600" />
+                Filter Leaderboard
+              </h2>
+              {(selectedKategori || selectedMateri) && (
+                <button
+                  onClick={handleClearFilters}
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm font-semibold text-gray-700 flex items-center gap-2 transition-all"
+                >
+                  <X className="w-4 h-4" />
+                  Clear Filter
+                </button>
+              )}
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              {/* Kategori Filter */}
+              <div>
+                <label className="block font-semibold text-gray-700 mb-2">
+                  Kategori
+                </label>
+                <select
+                  value={selectedKategori}
+                  onChange={(e) => setSelectedKategori(e.target.value)}
+                  className="border-2 border-gray-300 p-3 rounded-lg w-full hover:border-orange-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all"
+                >
+                  <option value="">Semua Kategori</option>
+                  {kategoriList.map((kat) => (
+                    <option key={kat.kategori_id} value={kat.kategori_id}>
+                      {kat.nama_kategori} ({kat.total_hasil} hasil)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Materi Filter */}
+              <div>
+                <label className="block font-semibold text-gray-700 mb-2">
+                  Materi
+                </label>
+                <select
+                  value={selectedMateri}
+                  onChange={(e) => setSelectedMateri(e.target.value)}
+                  disabled={!selectedKategori}
+                  className="border-2 border-gray-300 p-3 rounded-lg w-full hover:border-orange-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  <option value="">Semua Materi</option>
+                  {materiList.map((mat) => (
+                    <option key={mat.materi_id} value={mat.materi_id}>
+                      {mat.judul} ({mat.total_hasil} hasil)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Active Filters Display */}
+            {(selectedKategori || selectedMateri) && (
+              <div className="mt-4 p-3 bg-orange-50 rounded-lg border border-orange-200">
+                <p className="text-sm font-semibold text-gray-700">
+                  Filter Aktif: 
+                  {selectedKategori && (
+                    <span className="ml-2 px-3 py-1 bg-orange-200 rounded-full text-orange-800">
+                      {kategoriList.find(k => k.kategori_id == selectedKategori)?.nama_kategori}
+                    </span>
+                  )}
+                  {selectedMateri && (
+                    <span className="ml-2 px-3 py-1 bg-yellow-200 rounded-full text-yellow-800">
+                      {materiList.find(m => m.materi_id == selectedMateri)?.judul}
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Statistics Summary */}
+          {!loading && !error && leaderboardData.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+              <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg p-5 border-2 border-blue-200">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                    <Trophy className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 font-semibold">Total Peserta</p>
+                    <p className="text-2xl font-black text-gray-800">{leaderboardData.length}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg p-5 border-2 border-green-200">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                    <Star className="w-6 h-6 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 font-semibold">Skor Tertinggi</p>
+                    <p className="text-2xl font-black text-gray-800">
+                      {Math.max(...leaderboardData.map(d => d.skor))}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg p-5 border-2 border-orange-200">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+                    <TrendingUp className="w-6 h-6 text-orange-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 font-semibold">Rata-rata Skor</p>
+                    <p className="text-2xl font-black text-gray-800">
+                      {Math.round(leaderboardData.reduce((sum, d) => sum + d.skor, 0) / leaderboardData.length)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Subtitle */}
           <div className="text-center mb-10">
             <p className="text-gray-700 text-lg font-semibold flex items-center justify-center gap-2">
               <TrendingUp className="w-5 h-5 text-orange-600" />
               Top Peserta Dengan Skor Tertinggi
+              {(selectedKategori || selectedMateri) && (
+                <span className="text-orange-600">
+                  (Filtered)
+                </span>
+              )}
             </p>
           </div>
 
@@ -199,13 +381,20 @@ export default function Leaderboard() {
                             `}>
                               {item.nama_peserta}
                             </h3>
-                            <div className="flex items-center gap-3 text-sm text-gray-600 font-semibold">
-                              <span className="flex items-center gap-1">
-                                📚 {item.materi}
-                              </span>
-                              <span className="flex items-center gap-1">
+                            <div className="flex flex-wrap items-center gap-2 text-xs mt-1">
+                              <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-semibold">
                                 📂 {item.kategori}
                               </span>
+                              {item.materi && (
+                                <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full font-semibold">
+                                  📚 {item.materi}
+                                </span>
+                              )}
+                              {item.pin_code && (
+                                <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded-full font-semibold">
+                                  🔑 PIN: {item.pin_code}
+                                </span>
+                              )}
                             </div>
                           </div>
 
@@ -226,19 +415,30 @@ export default function Leaderboard() {
                           </div>
                         </div>
 
-                        {/* Additional Info for Top 3 */}
-                        {isTopThree && (
-                          <div className="mt-4 pt-4 border-t-2 border-orange-100 flex items-center justify-between text-sm">
-                            <span className="text-gray-600 font-semibold">
-                              🎯 Jawaban Benar: <span className="text-green-600 font-bold">{item.jawaban_benar || '-'}</span>
+                        {/* Additional Info */}
+                        <div className={`mt-4 pt-4 border-t-2 border-orange-100 ${isTopThree ? 'grid grid-cols-2 gap-3' : 'flex items-center justify-between'} text-sm`}>
+                          <span className="text-gray-600 font-semibold">
+                            🎯 Benar: <span className="text-green-600 font-bold">{item.jawaban_benar || 0}/{item.total_soal || 0}</span>
+                          </span>
+                          <span className="text-gray-600 font-semibold">
+                            ⏱️ Waktu: <span className="text-blue-600 font-bold">
+                              {item.waktu_pengerjaan ? `${Math.floor(item.waktu_pengerjaan / 60)}:${String(item.waktu_pengerjaan % 60).padStart(2, '0')}` : '-'}
                             </span>
-                            <span className="text-gray-600 font-semibold">
-                              ⏱️ Waktu: <span className="text-blue-600 font-bold">
-                                {item.waktu_pengerjaan ? `${Math.floor(item.waktu_pengerjaan / 60)}:${String(item.waktu_pengerjaan % 60).padStart(2, '0')}` : '-'}
+                          </span>
+                          {isTopThree && item.completed_at && (
+                            <span className="text-gray-600 font-semibold col-span-2">
+                              📅 Selesai: <span className="text-gray-700 font-bold">
+                                {new Date(item.completed_at).toLocaleString('id-ID', {
+                                  day: '2-digit',
+                                  month: 'short',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
                               </span>
                             </span>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                     );
                   })}

@@ -17,7 +17,9 @@ export default function BuatSoal() {
   const [showKategoriInput, setShowKategoriInput] = useState(false);
   const [materi, setMateri] = useState("");
   const [jumlahSoal, setJumlahSoal] = useState(1);
+  const [tipeWaktu, setTipeWaktu] = useState('per_soal'); // 🔥 'per_soal' atau 'keseluruhan'
   const [waktuPerSoal, setWaktuPerSoal] = useState(60); // 🔥 Timer per soal (default 60 detik)
+  const [waktuKeseluruhan, setWaktuKeseluruhan] = useState(null); // 🔥 Timer keseluruhan quiz dalam detik
   const [soalList, setSoalList] = useState([]);
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false); // 🔥 loading state
@@ -70,29 +72,77 @@ export default function BuatSoal() {
           if (response.status === "success" && response.data) {
             const soalFromAPI = response.data.soal_list || [];
             const waktuPerSoalFromAPI = response.data.waktu_per_soal || 60;
+            const waktuKeseluruhanFromAPI = response.data.waktu_keseluruhan;
+            const tipeWaktuFromAPI = response.data.tipe_waktu || 'per_soal';
+            
+            console.log("📸 Soal dari API:", soalFromAPI);
+            console.log("📸 Soal pertama gambar:", soalFromAPI[0]?.gambar ? "Ada gambar" : "Tidak ada gambar");
             
             // Set kategori dan materi SETELAH dapat data dari API
             setKategori(response.data.nama_kategori || stateData.kategori || "");
             setMateri(response.data.materi_judul || stateData.materi || "");
             setWaktuPerSoal(waktuPerSoalFromAPI);
+            setWaktuKeseluruhan(waktuKeseluruhanFromAPI);
+            setTipeWaktu(tipeWaktuFromAPI);
 
             // Transform backend format to frontend format
-            const transformedSoal = soalFromAPI.map((s, idx) => ({
-              id: s.soal_id || idx + 1,
-              soal: s.pertanyaan,
-              pertanyaan: s.pertanyaan,
-              gambar: null,
-              jenis: s.pilihan_a ? "pilihan_ganda" : "isian",
-              opsi: s.pilihan_a ? [s.pilihan_a, s.pilihan_b, s.pilihan_c, s.pilihan_d].filter(Boolean) : [],
-              jawaban: s.jawaban_benar,
-              jawabanHuruf: s.pilihan_a && [s.pilihan_a, s.pilihan_b, s.pilihan_c, s.pilihan_d].indexOf(s.jawaban_benar) >= 0
-                ? String.fromCharCode(65 + [s.pilihan_a, s.pilihan_b, s.pilihan_c, s.pilihan_d].indexOf(s.jawaban_benar))
-                : ""
-            }));
+            const transformedSoal = soalFromAPI.map((s, idx) => {
+              // Determine jenis soal
+              const isPilihanGanda = s.pilihan_a && s.pilihan_b;
+              const isIsian = !isPilihanGanda && !s.pilihan_c && !s.pilihan_d;
+              
+              // Parse jawaban - handle array untuk isian singkat dan variasi_jawaban
+              let jawaban;
+              if (isIsian) {
+                // Untuk isian singkat, cek variasi_jawaban terlebih dahulu
+                if (s.variasi_jawaban) {
+                  try {
+                    jawaban = typeof s.variasi_jawaban === 'string' 
+                      ? JSON.parse(s.variasi_jawaban) 
+                      : s.variasi_jawaban;
+                  } catch (e) {
+                    console.log('⚠️ Failed to parse variasi_jawaban:', e);
+                    // Fallback ke jawaban_benar
+                    jawaban = Array.isArray(s.jawaban_benar) ? s.jawaban_benar : [s.jawaban_benar];
+                  }
+                } else if (Array.isArray(s.jawaban_benar)) {
+                  jawaban = s.jawaban_benar;
+                } else {
+                  jawaban = [s.jawaban_benar];
+                }
+              } else {
+                // Pilihan ganda
+                jawaban = Array.isArray(s.jawaban_benar) ? s.jawaban_benar[0] : s.jawaban_benar;
+              }
+              
+              const transformed = {
+                id: s.soal_id || idx + 1,
+                soal: s.pertanyaan,
+                pertanyaan: s.pertanyaan,
+                gambar: s.gambar || null, // Load gambar dari backend
+                jenis: isPilihanGanda ? "pilihan_ganda" : "isian",
+                opsi: isPilihanGanda ? [s.pilihan_a, s.pilihan_b, s.pilihan_c, s.pilihan_d].filter(Boolean) : [],
+                jawaban: jawaban,
+                jawabanHuruf: isPilihanGanda && [s.pilihan_a, s.pilihan_b, s.pilihan_c, s.pilihan_d].indexOf(Array.isArray(jawaban) ? jawaban[0] : jawaban) >= 0
+                  ? String.fromCharCode(65 + [s.pilihan_a, s.pilihan_b, s.pilihan_c, s.pilihan_d].indexOf(Array.isArray(jawaban) ? jawaban[0] : jawaban))
+                  : ""
+              };
+              
+              if (idx === 0) {
+                console.log("📸 Transformed soal pertama:", {
+                  id: transformed.id,
+                  gambar: transformed.gambar ? "Ada gambar (length: " + transformed.gambar.length + ")" : "Tidak ada gambar",
+                  jenis: transformed.jenis
+                });
+              }
+              
+              return transformed;
+            });
 
             setSoalList(transformedSoal);
             setJumlahSoal(transformedSoal.length);
             console.log("✅ Loaded soal for edit:", transformedSoal.length, "soal");
+            console.log("📸 Total soal dengan gambar:", transformedSoal.filter(s => s.gambar).length);
           }
         } catch (error) {
           console.error("❌ Error loading soal data:", error);
@@ -223,11 +273,6 @@ export default function BuatSoal() {
       updated[index].opsi = [];
       updated[index].jawaban = [""];
       updated[index].jawabanHuruf = "";
-    } else {
-      // Essay
-      updated[index].opsi = [];
-      updated[index].jawaban = "";
-      updated[index].jawabanHuruf = "";
     }
     setSoalList(updated);
   };
@@ -236,13 +281,13 @@ export default function BuatSoal() {
     const updated = [...soalList];
     const currentSoal = updated[index];
     
-    // Untuk pilihan ganda dan essay: jawaban string
+    // Untuk pilihan ganda: jawaban string
     // Untuk isian: jawaban array
     if (currentSoal.jenis === "isian") {
       // Pastikan jawaban selalu array untuk isian
       updated[index].jawaban = Array.isArray(value.text) ? value.text : [value.text || ""];
     } else {
-      // Pilihan ganda dan essay: jawaban string
+      // Pilihan ganda: jawaban string
       updated[index].jawaban = Array.isArray(value.text) ? value.text[0] || "" : value.text;
     }
     updated[index].jawabanHuruf = value.huruf || "";
@@ -290,12 +335,6 @@ export default function BuatSoal() {
           if (validAnswers.length === 0) {
             err.jawaban = "Minimal 1 jawaban wajib diisi";
           }
-        }
-      }
-
-      if (soal.jenis === "essay") {
-        if (!soal.jawaban || !soal.jawaban.trim()) {
-          err.jawaban = "Jawaban wajib diisi";
         }
       }
 
@@ -437,13 +476,15 @@ export default function BuatSoal() {
       // STEP 3: Transform soal to backend format
       const soalListBackend = cleanedSoalList.map(s => ({
         pertanyaan: s.soal,
+        gambar: s.gambar || null, // Kirim gambar base64
         pilihan_a: s.jenis === "pilihan_ganda" ? s.opsi[0] : null,
         pilihan_b: s.jenis === "pilihan_ganda" ? s.opsi[1] : null,
         pilihan_c: s.jenis === "pilihan_ganda" ? s.opsi[2] : null,
         pilihan_d: s.jenis === "pilihan_ganda" ? s.opsi[3] : null,
-        jawaban_benar: s.jenis === "pilihan_ganda" 
-          ? s.jawaban 
-          : (Array.isArray(s.jawaban) ? s.jawaban[0] : s.jawaban)
+        // Kirim array lengkap untuk isian singkat, string untuk pilihan ganda
+        jawaban_benar: s.jenis === "isian" 
+          ? s.jawaban // Array untuk isian singkat
+          : s.jawaban // String untuk pilihan ganda
       }));
 
       // STEP 4: Create or Update kumpulan_soal with soal_list via API
@@ -456,7 +497,9 @@ export default function BuatSoal() {
           kategori_id: kategoriId,
           materi_id: materiId,
           soal_list: soalListBackend,
-          waktu_per_soal: waktuPerSoal
+          waktu_per_soal: waktuPerSoal,
+          waktu_keseluruhan: waktuKeseluruhan,
+          tipe_waktu: tipeWaktu
         }, token);
 
         if (kumpulanSoalResponse.status !== "success") {
@@ -471,7 +514,9 @@ export default function BuatSoal() {
           kategori_id: kategoriId,
           materi_id: materiId,
           soal_list: soalListBackend,
-          waktu_per_soal: waktuPerSoal
+          waktu_per_soal: waktuPerSoal,
+          waktu_keseluruhan: waktuKeseluruhan,
+          tipe_waktu: tipeWaktu
         }, token);
 
         if (kumpulanSoalResponse.status !== "success") {
@@ -484,37 +529,21 @@ export default function BuatSoal() {
 
       console.log("✅ Jumlah soal:", cleanedSoalList.length);
 
-      // STEP 5: Generate PIN via API (only for create mode)
+      // STEP 5: Get PIN from kumpulan_soal (auto-generated by trigger)
       if (!isEditMode) {
-        const now = new Date();
-        const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+        // PIN sudah auto-generated oleh database trigger saat create kumpulan_soal
+        // Ambil PIN dari response atau query ulang
+        let newPin = kumpulanSoalResponse.data.pin_code;
         
-        // Format datetime untuk MySQL: YYYY-MM-DD HH:MM:SS
-        const formatMySQLDateTime = (date) => {
-          const year = date.getFullYear();
-          const month = String(date.getMonth() + 1).padStart(2, '0');
-          const day = String(date.getDate()).padStart(2, '0');
-          const hours = String(date.getHours()).padStart(2, '0');
-          const minutes = String(date.getMinutes()).padStart(2, '0');
-          const seconds = String(date.getSeconds()).padStart(2, '0');
-          return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-        };
+        // Jika PIN belum ada di response, query ulang
+        if (!newPin) {
+          console.log("🔄 Fetching PIN from database...");
+          const soalData = await apiService.getSoalByKumpulanSoal(kumpulanSoalIdResult);
+          newPin = soalData.data.pin_code;
+        }
         
-        const quizData = {
-          judul: `Quiz ${finalKategori} - ${materi}`,
-          deskripsi: `Kumpulan soal ${finalKategori} tentang ${materi}`,
-          kumpulan_soal_id: kumpulanSoalIdResult,
-          user_id: user.id,
-          durasi: 30,
-          tanggal_mulai: formatMySQLDateTime(now),
-          tanggal_selesai: formatMySQLDateTime(endDate)
-        };
-
-        const pinResponse = await apiService.generatePin(quizData);
-        
-        if (pinResponse.status === "success") {
-          const newPin = pinResponse.data.pin_code;
-          console.log("✅ PIN berhasil dibuat:", newPin);
+        if (newPin) {
+          console.log("✅ PIN berhasil dibuat (auto-generated):", newPin);
           setPinCode(newPin);
           
           setLoading(false);
@@ -524,7 +553,7 @@ export default function BuatSoal() {
             window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
           }, 100);
         } else {
-          throw new Error(pinResponse.message || "Gagal generate PIN");
+          throw new Error("PIN tidak ditemukan. Database trigger mungkin tidak aktif.");
         }
       } else {
         // Edit mode: tampilkan popup sukses
@@ -662,6 +691,140 @@ export default function BuatSoal() {
           </div>
         </div>
 
+        {/* Pengaturan Waktu */}
+        <div className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-xl p-6 border-2 border-orange-200">
+          <label className="block font-semibold text-gray-800 mb-4 text-lg">
+            ⏱️ Pengaturan Waktu Quiz
+          </label>
+          
+          {/* Pilih Tipe Waktu */}
+          <div className="mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <button
+                type="button"
+                onClick={() => setTipeWaktu('per_soal')}
+                className={`p-4 rounded-xl border-2 transition-all text-left ${
+                  tipeWaktu === 'per_soal'
+                    ? "bg-orange-500 border-orange-600 text-white shadow-lg"
+                    : "bg-white border-orange-300 text-gray-700 hover:bg-orange-50"
+                }`}
+              >
+                <div className="font-bold text-lg mb-1">📝 Waktu Per Soal</div>
+                <div className={`text-sm ${tipeWaktu === 'per_soal' ? 'text-white' : 'text-gray-600'}`}>
+                  Setiap soal memiliki waktu sendiri
+                </div>
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => setTipeWaktu('keseluruhan')}
+                className={`p-4 rounded-xl border-2 transition-all text-left ${
+                  tipeWaktu === 'keseluruhan'
+                    ? "bg-orange-500 border-orange-600 text-white shadow-lg"
+                    : "bg-white border-orange-300 text-gray-700 hover:bg-orange-50"
+                }`}
+              >
+                <div className="font-bold text-lg mb-1">⏰ Waktu Keseluruhan</div>
+                <div className={`text-sm ${tipeWaktu === 'keseluruhan' ? 'text-white' : 'text-gray-600'}`}>
+                  Total waktu untuk semua soal
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Input Waktu Per Soal */}
+          {tipeWaktu === 'per_soal' && (
+            <div>
+              <label className="block font-semibold text-gray-700 mb-3">
+                Waktu Per Soal (detik)
+              </label>
+              <div className="flex flex-col md:flex-row gap-3 items-stretch">
+                <input
+                  type="number"
+                  min="10"
+                  max="300"
+                  value={waktuPerSoal}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 60;
+                    if (value >= 10 && value <= 300) {
+                      setWaktuPerSoal(value);
+                    }
+                  }}
+                  className="border-2 border-orange-300 p-3 rounded-lg w-full md:w-48 text-lg font-bold focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all"
+                />
+                <div className="flex gap-2 flex-wrap">
+                  {[30, 60, 90, 120].map(time => (
+                    <button
+                      key={time}
+                      type="button"
+                      onClick={() => setWaktuPerSoal(time)}
+                      className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                        waktuPerSoal === time
+                          ? "bg-orange-500 text-white shadow-lg"
+                          : "bg-white border-2 border-orange-300 text-orange-700 hover:bg-orange-100"
+                      }`}
+                    >
+                      {time}s
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="text-sm text-gray-600 mt-3 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                Timer akan reset setiap pindah soal
+              </p>
+            </div>
+          )}
+
+          {/* Input Waktu Keseluruhan */}
+          {tipeWaktu === 'keseluruhan' && (
+            <div>
+              <label className="block font-semibold text-gray-700 mb-3">
+                Total Waktu Quiz (menit)
+              </label>
+              <div className="flex flex-col md:flex-row gap-3 items-stretch">
+                <input
+                  type="number"
+                  min="1"
+                  max="180"
+                  value={waktuKeseluruhan ? Math.floor(waktuKeseluruhan / 60) : jumlahSoal}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 1;
+                    if (value >= 1 && value <= 180) {
+                      setWaktuKeseluruhan(value * 60);
+                    }
+                  }}
+                  className="border-2 border-orange-300 p-3 rounded-lg w-full md:w-48 text-lg font-bold focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all"
+                />
+                <div className="flex gap-2 flex-wrap">
+                  {[5, 10, 15, 30].map(mins => (
+                    <button
+                      key={mins}
+                      type="button"
+                      onClick={() => setWaktuKeseluruhan(mins * 60)}
+                      className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                        waktuKeseluruhan === mins * 60
+                          ? "bg-orange-500 text-white shadow-lg"
+                          : "bg-white border-2 border-orange-300 text-orange-700 hover:bg-orange-100"
+                      }`}
+                    >
+                      {mins} menit
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="text-sm text-gray-600 mt-3 flex items-center gap-2">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                </svg>
+                Waktu berjalan terus meskipun refresh browser (anti-curang)
+              </p>
+            </div>
+          )}
+        </div>
+
         {/* Jumlah soal */}
         {!isEditMode && (
           <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-6 border-2 border-blue-200">
@@ -669,7 +832,7 @@ export default function BuatSoal() {
               🎯 Jumlah Soal yang Akan Dibuat
             </label>
             <div className="flex flex-col md:flex-row gap-3 items-stretch">
-              <div className="relative">
+              <div className="relative flex-1">
                 <input
                   type="text"
                   inputMode="numeric"
@@ -699,20 +862,17 @@ export default function BuatSoal() {
                       setJumlahSoal(1);
                     }
                   }}
-                  className={`border-2 p-3 rounded-xl w-full md:w-50 text-center font-bold transition-all shadow-md ${
+                  className={`border-2 p-3 rounded-xl w-full text-center text-xl font-bold transition-all shadow-md ${
                     errors.jumlahSoal
                       ? "border-red-500 focus:ring-2 focus:ring-red-200"
                       : "border-orange-300 focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
                   }`}
                   placeholder="Masukkan angka"
                 />
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">
-                  
-                </div>
               </div>
               <button
                 onClick={handleGenerateSoal}
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-orange-400 to-yellow-500 hover:from-orange-500 hover:to-yellow-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all transform hover:scale-105 flex items-center justify-center gap-2"
+                className="px-8 py-3 bg-gradient-to-r from-orange-400 to-yellow-500 hover:from-orange-500 hover:to-yellow-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all transform hover:scale-105 flex items-center justify-center gap-2 whitespace-nowrap"
               >
                 <span className="text-2xl">⚡</span>
                 Generate Template Soal
@@ -731,82 +891,6 @@ export default function BuatSoal() {
             </p>
           </div>
         )}
-
-        {/* Waktu per soal */}
-        <div className="bg-gradient-to-r from-orange-50 to-yellow-50 rounded-xl p-6 border-2 border-orange-200">
-          <label className="block font-semibold text-gray-800 mb-3 text-lg">
-            ⏱️ Waktu Per Soal (detik)
-          </label>
-          <div className="flex flex-col md:flex-row gap-3 items-stretch">
-            <div className="relative">
-              <input
-                type="number"
-                min="10"
-                max="300"
-                value={waktuPerSoal}
-                onChange={(e) => {
-                  const value = parseInt(e.target.value) || 60;
-                  if (value >= 10 && value <= 300) {
-                    setWaktuPerSoal(value);
-                  }
-                }}
-                className="border-2 border-orange-300 p-3 rounded-lg w-full md:w-48 text-lg font-bold focus:border-orange-500 focus:ring-2 focus:ring-orange-100 transition-all"
-              />
-            </div>
-            <div className="flex gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => setWaktuPerSoal(30)}
-                className={`px-4 py-2 rounded-lg font-semibold transition-all ${
-                  waktuPerSoal === 30
-                    ? "bg-orange-500 text-white shadow-lg"
-                    : "bg-white border-2 border-orange-300 text-orange-700 hover:bg-orange-100"
-                }`}
-              >
-                30 detik
-              </button>
-              <button
-                type="button"
-                onClick={() => setWaktuPerSoal(60)}
-                className={`px-4 py-2 rounded-lg font-semibold transition-all ${
-                  waktuPerSoal === 60
-                    ? "bg-orange-500 text-white shadow-lg"
-                    : "bg-white border-2 border-orange-300 text-orange-700 hover:bg-orange-100"
-                }`}
-              >
-                60 detik
-              </button>
-              <button
-                type="button"
-                onClick={() => setWaktuPerSoal(90)}
-                className={`px-4 py-2 rounded-lg font-semibold transition-all ${
-                  waktuPerSoal === 90
-                    ? "bg-orange-500 text-white shadow-lg"
-                    : "bg-white border-2 border-orange-300 text-orange-700 hover:bg-orange-100"
-                }`}
-              >
-                90 detik
-              </button>
-              <button
-                type="button"
-                onClick={() => setWaktuPerSoal(120)}
-                className={`px-4 py-2 rounded-lg font-semibold transition-all ${
-                  waktuPerSoal === 120
-                    ? "bg-orange-500 text-white shadow-lg"
-                    : "bg-white border-2 border-orange-300 text-orange-700 hover:bg-orange-100"
-                }`}
-              >
-                120 detik
-              </button>
-            </div>
-          </div>
-          <p className="text-sm text-gray-600 mt-3 flex items-center gap-2">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-            </svg>
-            Peserta akan memiliki waktu ini untuk menjawab setiap soal
-          </p>
-        </div>
       </div>
 
       {/* Form soal */}

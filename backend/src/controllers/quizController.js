@@ -67,70 +67,75 @@ const quizController = {
     }
   },
 
-  // Validate PIN and get quiz info
+  // Validate PIN and get quiz info (PIN selalu aktif selama soal ada)
   async validatePin(req, res) {
     try {
+      console.log('📍 validatePin called with body:', req.body);
       const { pin } = req.body;
 
       // Validasi format PIN
       if (!pin || pin.length !== 6 || !/^\d{6}$/.test(pin)) {
+        console.log('❌ Invalid PIN format:', pin);
         return res.status(400).json({
           status: 'error',
           message: 'PIN harus 6 digit angka'
         });
       }
 
-      // Cari quiz berdasarkan PIN
-      const [quiz] = await db.query(
-        `SELECT q.*, ks.judul as kumpulan_soal_judul, k.nama_kategori as kategori_nama,
-                ks.jumlah_soal
-         FROM quiz q
-         JOIN kumpulan_soal ks ON q.kumpulan_soal_id = ks.kumpulan_soal_id
-         JOIN kategori k ON ks.kategori_id = k.id
-         WHERE q.pin_code = ? AND q.status = 'active'`,
+      console.log('🔍 Searching for PIN:', pin);
+
+      // Cari kumpulan_soal berdasarkan PIN menggunakan stored procedure
+      const [kumpulanSoal] = await db.query(
+        'CALL sp_peserta_validate_pin(?)',
         [pin]
       );
 
-      if (quiz.length === 0) {
+      // Result dari CALL adalah array of arrays, ambil yang pertama
+      const result = kumpulanSoal[0];
+
+      console.log('📦 Found kumpulan_soal:', result.length);
+
+      if (result.length === 0) {
+        console.log('❌ PIN not found in database');
         return res.status(404).json({
           status: 'error',
-          message: 'PIN tidak valid atau quiz sudah tidak aktif'
+          message: 'PIN tidak valid. Pastikan PIN yang Anda masukkan benar.'
         });
       }
 
-      // Check if quiz is still within time range
-      const now = new Date();
-      const startTime = new Date(quiz[0].tanggal_mulai);
-      const endTime = new Date(quiz[0].tanggal_selesai);
+      const ks = result[0];
+      console.log('✅ Kumpulan soal found:', ks.kumpulan_soal_id, '- Jumlah soal:', ks.jumlah_soal);
 
-      if (now < startTime) {
+      // Cek apakah ada soal di kumpulan ini
+      if (ks.jumlah_soal === 0) {
+        console.log('⚠️ No soal in this kumpulan');
         return res.status(400).json({
           status: 'error',
-          message: 'Quiz belum dimulai'
+          message: 'Belum ada soal dalam kumpulan ini. Silakan hubungi kreator.'
         });
       }
 
-      if (now > endTime) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'Quiz sudah berakhir'
-        });
-      }
-
-      res.json({
+      const responseData = {
         status: 'success',
+        message: 'PIN valid. Quiz siap dimulai.',
         data: {
-          quiz_id: quiz[0].quiz_id,
-          judul: quiz[0].judul,
-          deskripsi: quiz[0].deskripsi,
-          kategori: quiz[0].kategori_nama,
-          jumlah_soal: quiz[0].jumlah_soal,
-          durasi: quiz[0].durasi,
-          kumpulan_soal_id: quiz[0].kumpulan_soal_id
+          kumpulan_soal_id: ks.kumpulan_soal_id,
+          judul: ks.judul,
+          kategori: ks.kategori,
+          materi: ks.materi,
+          jumlah_soal: ks.jumlah_soal,
+          waktu_per_soal: ks.waktu_per_soal,
+          waktu_keseluruhan: ks.waktu_keseluruhan,
+          tipe_waktu: ks.tipe_waktu,
+          created_by: ks.created_by,
+          pin_code: ks.pin_code
         }
-      });
+      };
+
+      console.log('✅ Sending success response');
+      res.json(responseData);
     } catch (error) {
-      console.error('Error validating PIN:', error);
+      console.error('❌ Error validating PIN:', error);
       res.status(500).json({
         status: 'error',
         message: 'Terjadi kesalahan saat memvalidasi PIN'
@@ -138,8 +143,10 @@ const quizController = {
     }
   },
 
-  // Start a new quiz (untuk peserta)
+  // Start a new quiz (untuk peserta) - dengan session tracking
   async startQuiz(req, res) {
+    const connection = await db.getConnection();
+    
     try {
       const { kumpulan_soal_id, nama_peserta, pin_code } = req.body;
 
@@ -151,40 +158,233 @@ const quizController = {
         });
       }
 
-      // Get soal dari kumpulan_soal
-      const [soal] = await db.query(
-        `SELECT soal_id, pertanyaan, pilihan_a, pilihan_b, pilihan_c, pilihan_d 
+      await connection.beginTransaction();
+
+      // Check if session already exists (termasuk session yang is_active = FALSE)
+      const [existingSession] = await connection.query(
+        `SELECT * FROM quiz_session 
+         WHERE nama_peserta = ? AND kumpulan_soal_id = ? AND pin_code = ?
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [nama_peserta, kumpulan_soal_id, pin_code]
+      );
+
+      let sessionData;
+      const serverTime = new Date();
+
+      if (existingSession.length > 0) {
+        // Session sudah ada
+        sessionData = existingSession[0];
+        const existingWaktuBatas = new Date(sessionData.waktu_batas);
+        
+        // Jika session tidak aktif atau waktu habis, buat session baru dengan menghapus constraint lama
+        if (!sessionData.is_active || serverTime > existingWaktuBatas) {
+          // Mark old session as inactive
+          await connection.query(
+            'UPDATE quiz_session SET is_active = FALSE, waktu_selesai = ? WHERE session_id = ?',
+            [serverTime, sessionData.session_id]
+          );
+          
+          // Hapus constraint unique_session untuk user ini agar bisa buat session baru
+          // dengan cara menandai session lama sebagai selesai (sudah dilakukan di atas)
+          // Sekarang flow akan lanjut ke bawah untuk create session baru
+        } else {
+          // Session masih aktif dan valid, return data yang ada
+          const sisaWaktu = Math.floor((existingWaktuBatas - serverTime) / 1000); // dalam detik
+
+          // Get soal
+          const [soal] = await connection.query(
+            `SELECT soal_id, pertanyaan, gambar, pilihan_a, pilihan_b, pilihan_c, pilihan_d, jawaban_benar, variasi_jawaban 
+             FROM soal 
+             WHERE kumpulan_soal_id = ?
+             ORDER BY soal_id`,
+            [kumpulan_soal_id]
+          );
+
+          await connection.commit();
+
+          return res.json({
+            status: 'success',
+            message: 'Melanjutkan quiz yang sedang berjalan',
+            data: {
+              session_id: sessionData.session_id,
+              soal: soal,
+              waktu_mulai: sessionData.waktu_mulai,
+              waktu_batas: sessionData.waktu_batas,
+              sisa_waktu: sisaWaktu,
+              current_soal_index: sessionData.current_soal_index,
+              server_time: serverTime.toISOString(),
+              is_resume: true
+            }
+          });
+        }
+      }
+
+      // Buat session baru
+      // Get info kumpulan_soal untuk hitung waktu
+      const [kumpulanSoal] = await connection.query(
+        `SELECT jumlah_soal, waktu_per_soal, waktu_keseluruhan, tipe_waktu 
+         FROM kumpulan_soal 
+         WHERE kumpulan_soal_id = ?`,
+        [kumpulan_soal_id]
+      );
+
+      if (kumpulanSoal.length === 0) {
+        await connection.rollback();
+        return res.status(404).json({
+          status: 'error',
+          message: 'Kumpulan soal tidak ditemukan'
+        });
+      }
+
+      const ks = kumpulanSoal[0];
+
+      // Hitung waktu batas berdasarkan tipe waktu
+      let totalWaktuDetik;
+      if (ks.tipe_waktu === 'keseluruhan' && ks.waktu_keseluruhan) {
+        totalWaktuDetik = ks.waktu_keseluruhan;
+      } else {
+        // Default: waktu per soal * jumlah soal
+        totalWaktuDetik = ks.waktu_per_soal * ks.jumlah_soal;
+      }
+
+      const waktuMulai = new Date();
+      const waktuBatas = new Date(waktuMulai.getTime() + (totalWaktuDetik * 1000));
+
+      // Create quiz session
+      const [sessionResult] = await connection.query(
+        `INSERT INTO quiz_session 
+         (nama_peserta, kumpulan_soal_id, pin_code, waktu_mulai, waktu_batas, current_soal_index, is_active) 
+         VALUES (?, ?, ?, ?, ?, 0, TRUE)`,
+        [nama_peserta, kumpulan_soal_id, pin_code, waktuMulai, waktuBatas]
+      );
+
+      const sessionId = sessionResult.insertId;
+
+      // Get soal
+      const [soal] = await connection.query(
+        `SELECT soal_id, pertanyaan, gambar, pilihan_a, pilihan_b, pilihan_c, pilihan_d, jawaban_benar, variasi_jawaban 
          FROM soal 
          WHERE kumpulan_soal_id = ?
-         ORDER BY RAND()`,
+         ORDER BY soal_id`,
         [kumpulan_soal_id]
       );
 
       if (soal.length === 0) {
+        await connection.rollback();
         return res.status(404).json({
           status: 'error',
           message: 'Tidak ada soal tersedia untuk kumpulan soal ini'
         });
       }
 
-      // Create quiz hasil entry (belum ada skor)
-      const [result] = await db.query(
-        'INSERT INTO hasil_quiz (nama_peserta, kumpulan_soal_id, total_soal, pin_code) VALUES (?, ?, ?, ?)',
-        [nama_peserta, kumpulan_soal_id, soal.length, pin_code]
-      );
+      await connection.commit();
 
       res.json({
         status: 'success',
+        message: 'Quiz berhasil dimulai',
         data: {
-          hasil_id: result.insertId,
-          soal: soal
+          session_id: sessionId,
+          soal: soal,
+          waktu_mulai: waktuMulai.toISOString(),
+          waktu_batas: waktuBatas.toISOString(),
+          total_waktu: totalWaktuDetik,
+          sisa_waktu: totalWaktuDetik,
+          tipe_waktu: ks.tipe_waktu,
+          waktu_per_soal: ks.waktu_per_soal,
+          server_time: serverTime.toISOString(),
+          is_resume: false
         }
       });
     } catch (error) {
+      await connection.rollback();
       console.error('Error starting quiz:', error);
       res.status(500).json({
         status: 'error',
         message: 'Terjadi kesalahan saat memulai quiz'
+      });
+    } finally {
+      connection.release();
+    }
+  },
+
+  // Get remaining time for active session
+  async getRemainingTime(req, res) {
+    try {
+      const { session_id } = req.params;
+
+      const [session] = await db.query(
+        `SELECT * FROM quiz_session WHERE session_id = ? AND is_active = TRUE`,
+        [session_id]
+      );
+
+      if (session.length === 0) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Session tidak ditemukan atau sudah tidak aktif'
+        });
+      }
+
+      const sessionData = session[0];
+      const serverTime = new Date();
+      const waktuBatas = new Date(sessionData.waktu_batas);
+      const sisaWaktu = Math.floor((waktuBatas - serverTime) / 1000);
+
+      if (sisaWaktu <= 0) {
+        // Waktu habis, update session
+        await db.query(
+          'UPDATE quiz_session SET is_active = FALSE, waktu_selesai = ? WHERE session_id = ?',
+          [serverTime, session_id]
+        );
+
+        return res.json({
+          status: 'success',
+          data: {
+            sisa_waktu: 0,
+            time_expired: true,
+            server_time: serverTime.toISOString()
+          }
+        });
+      }
+
+      res.json({
+        status: 'success',
+        data: {
+          sisa_waktu: sisaWaktu,
+          time_expired: false,
+          waktu_batas: sessionData.waktu_batas,
+          server_time: serverTime.toISOString()
+        }
+      });
+    } catch (error) {
+      console.error('Error getting remaining time:', error);
+      res.status(500).json({
+        status: 'error',
+        message: 'Terjadi kesalahan saat mengambil sisa waktu'
+      });
+    }
+  },
+
+  // Update current soal index (tracking progress)
+  async updateProgress(req, res) {
+    try {
+      const { session_id } = req.params;
+      const { current_soal_index } = req.body;
+
+      await db.query(
+        'UPDATE quiz_session SET current_soal_index = ? WHERE session_id = ?',
+        [current_soal_index, session_id]
+      );
+
+      res.json({
+        status: 'success',
+        message: 'Progress berhasil disimpan'
+      });
+    } catch (error) {
+      console.error('Error updating progress:', error);
+      res.status(500).json({
+        status: 'error',
+        message: 'Terjadi kesalahan saat menyimpan progress'
       });
     }
   },
@@ -235,12 +435,12 @@ const quizController = {
     }
   },
 
-  // Submit quiz result directly (simplified endpoint)
+  // Submit quiz result directly (simplified endpoint) - dengan session validation
   async submitQuizResult(req, res) {
     const connection = await db.getConnection();
     
     try {
-      const { nama_peserta, kumpulan_soal_id, skor, jawaban_benar, total_soal, waktu_pengerjaan, pin_code, jawaban_detail } = req.body;
+      const { session_id, nama_peserta, kumpulan_soal_id, skor, jawaban_benar, total_soal, waktu_pengerjaan, pin_code, jawaban_detail } = req.body;
 
       // Validasi input
       if (!nama_peserta || !kumpulan_soal_id || skor === undefined) {
@@ -254,18 +454,49 @@ const quizController = {
       await connection.beginTransaction();
 
       try {
-        // Insert hasil quiz
-        const [result] = await connection.query(
-          `INSERT INTO hasil_quiz 
-           (nama_peserta, kumpulan_soal_id, skor, jawaban_benar, total_soal, waktu_pengerjaan, pin_code, completed_at) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-          [nama_peserta, kumpulan_soal_id, skor, jawaban_benar, total_soal, waktu_pengerjaan, pin_code]
+        // Validate session jika ada
+        if (session_id) {
+          const [session] = await connection.query(
+            'SELECT * FROM quiz_session WHERE session_id = ?',
+            [session_id]
+          );
+
+          if (session.length > 0) {
+            const sessionData = session[0];
+            const waktuBatas = new Date(sessionData.waktu_batas);
+            const serverTime = new Date();
+
+            // Cek apakah submit masih dalam batas waktu
+            if (serverTime > waktuBatas) {
+              await connection.rollback();
+              return res.status(400).json({
+                status: 'error',
+                message: 'Waktu pengerjaan sudah habis',
+                timeExpired: true
+              });
+            }
+
+            // Update session menjadi tidak aktif
+            await connection.query(
+              'UPDATE quiz_session SET is_active = FALSE, waktu_selesai = NOW() WHERE session_id = ?',
+              [session_id]
+            );
+          }
+        }
+
+        // Insert hasil quiz menggunakan stored procedure
+        const [resultData] = await connection.query(
+          'CALL sp_peserta_submit_result(?, ?, ?, ?, ?, ?, ?, ?)',
+          [session_id || null, nama_peserta, kumpulan_soal_id, skor, jawaban_benar, total_soal, waktu_pengerjaan, pin_code]
         );
 
-        const hasil_id = result.insertId;
+        // Result dari CALL adalah array of arrays
+        const hasilData = resultData[0][0];
+        const hasil_id = hasilData.hasil_id;
 
         console.log('✅ Quiz result saved to database:', {
           hasil_id,
+          session_id,
           nama_peserta,
           skor,
           jawaban_benar,

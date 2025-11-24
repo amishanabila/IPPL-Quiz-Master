@@ -54,6 +54,8 @@ export default function KumpulanMateri() {
         }
 
         if (response.status === "success" && response.data) {
+          console.log("📊 Raw materi data from API:", response.data);
+          
           // Transform API data to component format
           const materiFromAPI = await Promise.all(response.data.map(async (m) => {
             // Fetch kumpulan_soal_id for each materi
@@ -61,12 +63,17 @@ export default function KumpulanMateri() {
             let jumlahSoal = 0;
             try {
               const soalResponse = await apiService.getSoalByMateri(m.materi_id);
+              console.log(`📝 Soal for materi ${m.materi_id} (${m.judul}):`, soalResponse);
+              
               if (soalResponse.status === "success" && soalResponse.data) {
                 kumpulanSoalId = soalResponse.data.kumpulan_soal_id;
                 jumlahSoal = soalResponse.data.soal_list?.length || 0;
+                console.log(`✅ Found ${jumlahSoal} soal for materi ${m.materi_id}`);
+              } else {
+                console.log(`⚠️ No soal found for materi ${m.materi_id} (${m.judul})`);
               }
             } catch (err) {
-              console.error("Error fetching soal for materi:", m.materi_id, err);
+              console.error(`❌ Error fetching soal for materi ${m.materi_id} (${m.judul}):`, err);
             }
 
             return {
@@ -340,7 +347,7 @@ export default function KumpulanMateri() {
                       {openMenuIndex === `all-${idx}` && (
                         <div className="absolute right-0 mt-1 w-40 bg-white rounded-lg shadow-xl border border-gray-200 z-10">
                           <button
-                            onClick={(e) => handleLihatSoal(e, m.materi)}
+                            onClick={(e) => handleLihatSoal(e, m)}
                             className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 rounded-t-lg"
                           >
                             <Eye size={16} className="text-blue-600" />

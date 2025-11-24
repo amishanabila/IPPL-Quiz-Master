@@ -6,7 +6,7 @@ const soalController = {
     const connection = await db.getConnection();
     
     try {
-      const { kategori_id, soal_list, waktu_per_soal, materi_id } = req.body;
+      const { kategori_id, soal_list, waktu_per_soal, waktu_keseluruhan, tipe_waktu, materi_id } = req.body;
       const created_by = req.user.id; // From auth middleware
       const updated_by = req.user.id;
 
@@ -23,19 +23,47 @@ const soalController = {
       await connection.beginTransaction();
 
       try {
-        // Create kumpulan_soal entry
+        // Create kumpulan_soal entry dengan timing options
         const [kumpulanResult] = await connection.query(
-          'INSERT INTO kumpulan_soal (judul, kategori_id, materi_id, created_by, updated_by, waktu_per_soal) VALUES (?, ?, ?, ?, ?, ?)',
-          [judul, kategori_id, materi_id || null, created_by, updated_by, waktu_per_soal || 60]
+          'INSERT INTO kumpulan_soal (judul, kategori_id, materi_id, created_by, updated_by, waktu_per_soal, waktu_keseluruhan, tipe_waktu) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [judul, kategori_id, materi_id || null, created_by, updated_by, waktu_per_soal || 60, waktu_keseluruhan || null, tipe_waktu || 'per_soal']
         );
 
         const kumpulan_soal_id = kumpulanResult.insertId;
 
-        // Insert individual soal
+        // Insert individual soal dengan validasi
         for (const soal of soal_list) {
+          // Handle array jawaban (untuk isian singkat) atau string (untuk pilihan ganda/essay)
+          let jawabanBenar;
+          let variasiJawaban = null;
+          
+          if (Array.isArray(soal.jawaban_benar)) {
+            // Isian singkat: filter jawaban yang valid
+            const validAnswers = soal.jawaban_benar.filter(j => j && typeof j === 'string' && j.trim() !== '');
+            if (validAnswers.length === 0) {
+              throw new Error(`Soal "${soal.pertanyaan}" memiliki jawaban yang tidak valid. Minimal 1 jawaban harus diisi.`);
+            }
+            jawabanBenar = validAnswers[0]; // Jawaban utama
+            variasiJawaban = JSON.stringify(validAnswers); // Simpan semua variasi sebagai JSON
+          } else {
+            // Pilihan ganda atau essay
+            jawabanBenar = soal.jawaban_benar?.trim();
+            if (!jawabanBenar || jawabanBenar === '-' || jawabanBenar.length === 0) {
+              throw new Error(`Soal "${soal.pertanyaan}" memiliki jawaban yang tidak valid. Jawaban benar tidak boleh kosong.`);
+            }
+          }
+          
+          // Validasi: Untuk pilihan ganda, jawaban harus salah satu dari pilihan
+          if (soal.pilihan_a && soal.pilihan_b) {
+            const pilihan = [soal.pilihan_a, soal.pilihan_b, soal.pilihan_c, soal.pilihan_d].filter(p => p);
+            if (!pilihan.includes(jawabanBenar)) {
+              throw new Error(`Soal "${soal.pertanyaan}" memiliki jawaban benar yang tidak sesuai dengan pilihan. Jawaban harus salah satu dari: ${pilihan.join(', ')}`);
+            }
+          }
+          
           await connection.query(
-            'INSERT INTO soal (kumpulan_soal_id, pertanyaan, pilihan_a, pilihan_b, pilihan_c, pilihan_d, jawaban_benar) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [kumpulan_soal_id, soal.pertanyaan, soal.pilihan_a, soal.pilihan_b, soal.pilihan_c, soal.pilihan_d, soal.jawaban_benar]
+            'INSERT INTO soal (kumpulan_soal_id, pertanyaan, gambar, pilihan_a, pilihan_b, pilihan_c, pilihan_d, jawaban_benar, variasi_jawaban) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [kumpulan_soal_id, soal.pertanyaan, soal.gambar || null, soal.pilihan_a, soal.pilihan_b, soal.pilihan_c, soal.pilihan_d, jawabanBenar, variasiJawaban]
           );
         }
 
@@ -48,13 +76,20 @@ const soalController = {
         // Commit transaction
         await connection.commit();
 
+        // Get the generated PIN code
+        const [kumpulanData] = await connection.query(
+          'SELECT pin_code FROM kumpulan_soal WHERE kumpulan_soal_id = ?',
+          [kumpulan_soal_id]
+        );
+
         res.status(201).json({
           status: 'success',
-          message: 'Kumpulan soal berhasil dibuat',
+          message: 'Kumpulan soal berhasil dibuat. PIN telah di-generate otomatis.',
           data: {
             kumpulan_soal_id: kumpulan_soal_id,
             kategori_id,
-            soal_count: soal_list.length
+            soal_count: soal_list.length,
+            pin_code: kumpulanData[0]?.pin_code
           }
         });
       } catch (error) {
@@ -91,17 +126,39 @@ const soalController = {
         });
       }
 
-      // Get soal list
+      // Get soal list dengan gambar dan variasi_jawaban
       const [soal] = await db.query(
-        'SELECT soal_id, pertanyaan, pilihan_a, pilihan_b, pilihan_c, pilihan_d, jawaban_benar FROM soal WHERE kumpulan_soal_id = ?',
+        'SELECT soal_id, pertanyaan, gambar, pilihan_a, pilihan_b, pilihan_c, pilihan_d, jawaban_benar, variasi_jawaban FROM soal WHERE kumpulan_soal_id = ?',
         [id]
       );
+
+      // Parse variasi_jawaban jika ada (MySQL2 returns JSON as string or object)
+      const soalParsed = soal.map(s => {
+        let jawabanBenar = s.jawaban_benar;
+        
+        // Jika ada variasi_jawaban, gunakan itu (untuk isian singkat)
+        if (s.variasi_jawaban) {
+          try {
+            jawabanBenar = typeof s.variasi_jawaban === 'string' 
+              ? JSON.parse(s.variasi_jawaban) 
+              : s.variasi_jawaban;
+          } catch (e) {
+            console.log('Failed to parse variasi_jawaban:', e);
+          }
+        }
+        
+        return {
+          ...s,
+          jawaban_benar: jawabanBenar,
+          variasi_jawaban: s.variasi_jawaban
+        };
+      });
 
       res.json({
         status: 'success',
         data: {
           ...kumpulan[0],
-          soal_list: soal
+          soal_list: soalParsed
         }
       });
     } catch (error) {
@@ -119,7 +176,7 @@ const soalController = {
     
     try {
       const { id } = req.params;
-      const { kategori_id, soal_list, waktu_per_soal, materi_id } = req.body;
+      const { kategori_id, soal_list, waktu_per_soal, waktu_keseluruhan, tipe_waktu, materi_id } = req.body;
       const updated_by = req.user.id; // From auth middleware
 
       // Get judul from materi if materi_id is provided
@@ -135,10 +192,10 @@ const soalController = {
       await connection.beginTransaction();
 
       try {
-        // Update kumpulan_soal
+        // Update kumpulan_soal dengan timing options
         const [kumpulanResult] = await connection.query(
-          'UPDATE kumpulan_soal SET judul = ?, kategori_id = ?, materi_id = ?, updated_by = ?, waktu_per_soal = ? WHERE kumpulan_soal_id = ?',
-          [judul, kategori_id, materi_id || null, updated_by, waktu_per_soal || 60, id]
+          'UPDATE kumpulan_soal SET judul = ?, kategori_id = ?, materi_id = ?, updated_by = ?, waktu_per_soal = ?, waktu_keseluruhan = ?, tipe_waktu = ? WHERE kumpulan_soal_id = ?',
+          [judul, kategori_id, materi_id || null, updated_by, waktu_per_soal || 60, waktu_keseluruhan || null, tipe_waktu || 'per_soal', id]
         );
 
         if (kumpulanResult.affectedRows === 0) {
@@ -152,11 +209,39 @@ const soalController = {
         // Delete existing soal
         await connection.query('DELETE FROM soal WHERE kumpulan_soal_id = ?', [id]);
 
-        // Insert updated soal
+        // Insert updated soal dengan validasi
         for (const soal of soal_list) {
+          // Handle array jawaban (untuk isian singkat) atau string (untuk pilihan ganda/essay)
+          let jawabanBenar;
+          let variasiJawaban = null;
+          
+          if (Array.isArray(soal.jawaban_benar)) {
+            // Isian singkat: filter jawaban yang valid
+            const validAnswers = soal.jawaban_benar.filter(j => j && typeof j === 'string' && j.trim() !== '');
+            if (validAnswers.length === 0) {
+              throw new Error(`Soal "${soal.pertanyaan}" memiliki jawaban yang tidak valid. Minimal 1 jawaban harus diisi.`);
+            }
+            jawabanBenar = validAnswers[0]; // Jawaban utama
+            variasiJawaban = JSON.stringify(validAnswers); // Simpan semua variasi sebagai JSON
+          } else {
+            // Pilihan ganda atau essay
+            jawabanBenar = soal.jawaban_benar?.trim();
+            if (!jawabanBenar || jawabanBenar === '-' || jawabanBenar.length === 0) {
+              throw new Error(`Soal "${soal.pertanyaan}" memiliki jawaban yang tidak valid. Jawaban benar tidak boleh kosong.`);
+            }
+          }
+          
+          // Validasi: Untuk pilihan ganda, jawaban harus salah satu dari pilihan
+          if (soal.pilihan_a && soal.pilihan_b) {
+            const pilihan = [soal.pilihan_a, soal.pilihan_b, soal.pilihan_c, soal.pilihan_d].filter(p => p);
+            if (!pilihan.includes(jawabanBenar)) {
+              throw new Error(`Soal "${soal.pertanyaan}" memiliki jawaban benar yang tidak sesuai dengan pilihan. Jawaban harus salah satu dari: ${pilihan.join(', ')}`);
+            }
+          }
+          
           await connection.query(
-            'INSERT INTO soal (kumpulan_soal_id, pertanyaan, pilihan_a, pilihan_b, pilihan_c, pilihan_d, jawaban_benar) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [id, soal.pertanyaan, soal.pilihan_a, soal.pilihan_b, soal.pilihan_c, soal.pilihan_d, soal.jawaban_benar]
+            'INSERT INTO soal (kumpulan_soal_id, pertanyaan, gambar, pilihan_a, pilihan_b, pilihan_c, pilihan_d, jawaban_benar, variasi_jawaban) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, soal.pertanyaan, soal.gambar || null, soal.pilihan_a, soal.pilihan_b, soal.pilihan_c, soal.pilihan_d, jawabanBenar, variasiJawaban]
           );
         }
 
@@ -279,7 +364,7 @@ const soalController = {
 
       // Get kumpulan_soal with soal for this materi
       const [kumpulanSoal] = await db.query(
-        `SELECT ks.kumpulan_soal_id, ks.kategori_id, k.nama_kategori, ks.materi_id, ks.created_at
+        `SELECT ks.kumpulan_soal_id, ks.kategori_id, k.nama_kategori, ks.materi_id, ks.pin_code, ks.created_at
          FROM kumpulan_soal ks 
          JOIN kategori k ON ks.kategori_id = k.id
          WHERE ks.materi_id = ?
@@ -304,7 +389,7 @@ const soalController = {
 
       // Get soal list
       const [soal] = await db.query(
-        'SELECT soal_id, pertanyaan, pilihan_a, pilihan_b, pilihan_c, pilihan_d, jawaban_benar FROM soal WHERE kumpulan_soal_id = ?',
+        'SELECT soal_id, pertanyaan, gambar, pilihan_a, pilihan_b, pilihan_c, pilihan_d, jawaban_benar, variasi_jawaban FROM soal WHERE kumpulan_soal_id = ?',
         [kumpulanSoal[0].kumpulan_soal_id]
       );
 
@@ -313,11 +398,17 @@ const soalController = {
         console.log('✅ First soal:', soal[0]);
       }
 
+      // MySQL2 returns JSON column as JavaScript array directly, no parsing needed
+      const soalParsed = soal.map(s => ({
+        ...s,
+        jawaban_benar: s.variasi_jawaban ? s.variasi_jawaban : s.jawaban_benar
+      }));
+
       res.json({
         status: 'success',
         data: {
           ...kumpulanSoal[0],
-          soal_list: soal
+          soal_list: soalParsed
         }
       });
     } catch (error) {
@@ -335,10 +426,11 @@ const soalController = {
       const { kumpulanSoalId } = req.params;
       console.log('🔍 getSoalByKumpulanSoal called with kumpulanSoalId:', kumpulanSoalId);
 
-      // Get kumpulan_soal info
+      // Get kumpulan_soal info with timing
       const [kumpulanSoal] = await db.query(
         `SELECT ks.kumpulan_soal_id, ks.judul, ks.kategori_id, k.nama_kategori, 
-                ks.materi_id, m.judul as materi_judul, ks.jumlah_soal, ks.waktu_per_soal, ks.created_at
+                ks.materi_id, m.judul as materi_judul, ks.jumlah_soal, 
+                ks.waktu_per_soal, ks.waktu_keseluruhan, ks.tipe_waktu, ks.created_at
          FROM kumpulan_soal ks 
          JOIN kategori k ON ks.kategori_id = k.id
          LEFT JOIN materi m ON ks.materi_id = m.materi_id
@@ -360,7 +452,7 @@ const soalController = {
 
       // Get soal list
       const [soal] = await db.query(
-        'SELECT soal_id, pertanyaan, pilihan_a, pilihan_b, pilihan_c, pilihan_d, jawaban_benar FROM soal WHERE kumpulan_soal_id = ? ORDER BY soal_id',
+        'SELECT soal_id, pertanyaan, gambar, pilihan_a, pilihan_b, pilihan_c, pilihan_d, jawaban_benar, variasi_jawaban FROM soal WHERE kumpulan_soal_id = ? ORDER BY soal_id',
         [kumpulanSoalId]
       );
 
@@ -369,11 +461,17 @@ const soalController = {
         console.log('✅ First soal:', soal[0]);
       }
 
+      // MySQL2 returns JSON column as JavaScript array directly, no parsing needed
+      const soalParsed = soal.map(s => ({
+        ...s,
+        jawaban_benar: s.variasi_jawaban ? s.variasi_jawaban : s.jawaban_benar
+      }));
+
       res.json({
         status: 'success',
         data: {
           ...kumpulanSoal[0],
-          soal_list: soal
+          soal_list: soalParsed
         }
       });
     } catch (error) {

@@ -24,9 +24,14 @@ export default function Soal() {
   const [showConfirmPopup, setShowConfirmPopup] = useState(false);
   const soalAktif = soalListRandom[currentIndex];
 
-  // --- TIMER GLOBAL (Dynamic dari kreator) ---
-  const [TOTAL_TIME, setTotalTime] = useState(60); // Default 60 detik
-  const [timeLeft, setTimeLeft] = useState(60);
+  // --- SESSION-BASED TIMER (Server timestamp) ---
+  const [sessionId, setSessionId] = useState(null);
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [timerMode, setTimerMode] = useState('keseluruhan'); // 'per_soal' or 'keseluruhan'
+  const [waktuPerSoal, setWaktuPerSoal] = useState(60);
+  const [totalWaktu, setTotalWaktu] = useState(0);
+  const [waktuAwal, setWaktuAwal] = useState(0); // Waktu awal untuk perhitungan progress (tidak berubah)
+  const [showTimeUpPopup, setShowTimeUpPopup] = useState(false); // Popup waktu habis
 
   // Load soal from API on mount
   useEffect(() => {
@@ -41,47 +46,104 @@ export default function Soal() {
         // Check if this is a quiz flow (with kumpulan_soal_id from PIN validation)
         if (stateData?.quizData?.kumpulan_soal_id) {
           const kumpulanSoalId = stateData.quizData.kumpulan_soal_id;
+          const namaPeserta = stateData.nama || 'Anonymous';
+          const pinCode = stateData.pin;
+          
           console.log("🎯 Quiz flow detected with kumpulan_soal_id:", kumpulanSoalId);
+          console.log("👤 Nama peserta:", namaPeserta);
           
           setMateri({
             materi: stateData.quizData.judul || stateData.quizData.kategori,
             kategori: stateData.quizData.kategori || "Quiz"
           });
           
-          // Fetch soal by kumpulan_soal_id
-          const response = await apiService.getSoalByKumpulanSoal(kumpulanSoalId);
-          console.log("📦 Quiz API Response:", response);
-          
-          if (response.status === "success" && response.data && response.data.soal_list) {
-            const soalFromAPI = response.data.soal_list;
-            const waktuPerSoal = response.data.waktu_per_soal || 60;
+          // Start quiz session (akan otomatis resume jika sudah ada)
+          try {
+            const sessionResponse = await apiService.startQuiz({
+              kumpulan_soal_id: kumpulanSoalId,
+              nama_peserta: namaPeserta,
+              pin_code: pinCode
+            });
             
-            console.log("✅ Loaded quiz soal from API:", soalFromAPI.length);
-            console.log("⏱️ Waktu per soal:", waktuPerSoal, "detik");
+            console.log("📦 Start Quiz Session Response:", sessionResponse);
             
-            // Set timer dari kreator
-            setTotalTime(waktuPerSoal);
-            setTimeLeft(waktuPerSoal);
-            
-            if (soalFromAPI.length > 0) {
-              // Transform backend format to frontend format and shuffle
-              const transformedSoal = soalFromAPI.map((s, idx) => ({
-                id: s.soal_id || idx,
-                soal: s.pertanyaan,
-                pertanyaan: s.pertanyaan,
-                opsi: [s.pilihan_a, s.pilihan_b, s.pilihan_c, s.pilihan_d].filter(Boolean),
-                jawaban: s.jawaban_benar,
-                jenis: "pilihan_ganda",
-                gambar: null
-              }));
+            if (sessionResponse.status === "success" && sessionResponse.data) {
+              const sessionData = sessionResponse.data;
               
-              // Shuffle soal
-              const shuffled = transformedSoal.sort(() => Math.random() - 0.5);
-              console.log("✅ Quiz soal shuffled:", shuffled.length);
-              setSoalListRandom(shuffled);
+              // Hitung waktu awal terlebih dahulu sebelum set state
+              const initialTotalWaktu = sessionData.tipe_waktu === 'per_soal' 
+                ? sessionData.waktu_per_soal 
+                : sessionData.total_waktu;
+              
+              // Set semua state timer secara berurutan
+              // PENTING: Set dalam urutan yang benar agar progress calculation tidak error
+              setTimerMode(sessionData.tipe_waktu || 'keseluruhan');
+              setWaktuPerSoal(sessionData.waktu_per_soal || 60);
+              setTotalWaktu(initialTotalWaktu); // Total waktu (bisa berubah per soal)
+              setWaktuAwal(initialTotalWaktu);  // Waktu awal yang TIDAK BERUBAH untuk progress bar
+              setTimeLeft(sessionData.sisa_waktu); // Sisa waktu dari server
+              setSessionId(sessionData.session_id); // Session ID terakhir agar timer effect berjalan
+              
+              // Restore progress jika resume
+              if (sessionData.is_resume) {
+                console.log("🔄 Resuming quiz from index:", sessionData.current_soal_index);
+                setCurrentIndex(sessionData.current_soal_index || 0);
+              }
+              
+              console.log("⏱️ Timer mode:", sessionData.tipe_waktu);
+              console.log("⏱️ Waktu awal (total):", initialTotalWaktu, "detik");
+              console.log("⏱️ Sisa waktu:", sessionData.sisa_waktu, "detik");
+              console.log("⏱️ Waktu terpakai:", initialTotalWaktu - sessionData.sisa_waktu, "detik");
+              console.log("⏱️ Progress (sisa/total):", (sessionData.sisa_waktu / initialTotalWaktu * 100).toFixed(1) + "%");
+              
+              // Transform and load soal
+              const soalFromAPI = sessionData.soal;
+              if (soalFromAPI && soalFromAPI.length > 0) {
+                const transformedSoal = soalFromAPI.map((s, idx) => {
+                  // Determine jenis soal: if no pilihan, it's isian
+                  const hasOptions = s.pilihan_a || s.pilihan_b || s.pilihan_c || s.pilihan_d;
+                  const jenisSoal = hasOptions ? "pilihan_ganda" : "isian";
+                  
+                  // Parse variasi_jawaban untuk isian singkat
+                  let jawaban = s.jawaban_benar;
+                  if (jenisSoal === "isian" && s.variasi_jawaban) {
+                    try {
+                      // Parse JSON string menjadi array
+                      jawaban = typeof s.variasi_jawaban === 'string' 
+                        ? JSON.parse(s.variasi_jawaban) 
+                        : s.variasi_jawaban;
+                    } catch (e) {
+                      console.log('⚠️ Failed to parse variasi_jawaban for soal', s.soal_id, ':', e);
+                      // Fallback ke jawaban_benar jika parsing gagal
+                      jawaban = [s.jawaban_benar];
+                    }
+                  }
+                  
+                  return {
+                    id: s.soal_id || idx,
+                    soal: s.pertanyaan,
+                    pertanyaan: s.pertanyaan,
+                    opsi: [s.pilihan_a, s.pilihan_b, s.pilihan_c, s.pilihan_d].filter(Boolean),
+                    jawaban: jawaban, // Gunakan variasi_jawaban jika ada
+                    jenis: jenisSoal,
+                    gambar: s.gambar || null // Ambil gambar dari backend
+                  };
+                });
+                
+                console.log("✅ Quiz soal loaded:", transformedSoal.length);
+                console.log("📝 Soal types:", transformedSoal.map(s => `${s.id}: ${s.jenis}`));
+                console.log("📝 First soal jawaban type:", typeof transformedSoal[0]?.jawaban, Array.isArray(transformedSoal[0]?.jawaban) ? "array" : "single");
+                setSoalListRandom(transformedSoal);
+              }
+            } else if (sessionResponse.timeExpired) {
+              // Waktu sudah habis
+              alert("Waktu pengerjaan quiz sudah habis!");
+              navigate(-1);
             }
-          } else {
-            console.log("❌ Tidak ada soal quiz ditemukan");
+          } catch (error) {
+            console.error("❌ Error starting quiz session:", error);
+            alert("Gagal memulai quiz. Silakan coba lagi.");
+            navigate(-1);
           }
         } 
         // Materi flow (original flow with materi_id)
@@ -143,19 +205,27 @@ export default function Soal() {
             
             if (soalFromAPI.length > 0) {
               // Transform backend format to frontend format and shuffle
-              const transformedSoal = soalFromAPI.map((s, idx) => ({
-                id: s.soal_id || idx,
-                soal: s.pertanyaan,
-                pertanyaan: s.pertanyaan,
-                opsi: [s.pilihan_a, s.pilihan_b, s.pilihan_c, s.pilihan_d].filter(Boolean),
-                jawaban: s.jawaban_benar,
-                jenis: "pilihan_ganda",
-                gambar: null
-              }));
+              const transformedSoal = soalFromAPI.map((s, idx) => {
+                // Determine jenis soal: if no pilihan, it's isian
+                const hasOptions = s.pilihan_a || s.pilihan_b || s.pilihan_c || s.pilihan_d;
+                const jenisSoal = hasOptions ? "pilihan_ganda" : "isian";
+                
+                return {
+                  id: s.soal_id || idx,
+                  soal: s.pertanyaan,
+                  pertanyaan: s.pertanyaan,
+                  opsi: [s.pilihan_a, s.pilihan_b, s.pilihan_c, s.pilihan_d].filter(Boolean),
+                  jawaban: s.jawaban_benar,
+                  jenis: jenisSoal,
+                  gambar: null
+                };
+              });
               
               // Shuffle soal
               const shuffled = transformedSoal.sort(() => Math.random() - 0.5);
               console.log("✅ Soal shuffled:", shuffled.length);
+              console.log("📝 Soal types:", shuffled.map(s => `${s.id}: ${s.jenis}`));
+              console.log("📝 First soal jawaban:", shuffled[0]?.jawaban, "- Is array?", Array.isArray(shuffled[0]?.jawaban));
               setSoalListRandom(shuffled);
             } else {
               console.log("❌ soalFromAPI length is 0");
@@ -174,26 +244,128 @@ export default function Soal() {
     loadSoalFromAPI();
   }, [location.state, slug]); // Add slug to dependencies
 
-  // Timer effect
+  // Timer effect - sync dengan server
   useEffect(() => {
-    if (soalListRandom.length === 0 || loading) return;
+    if (soalListRandom.length === 0 || loading || !sessionId) return;
 
     if (timeLeft <= 0) {
-      // Time's up - submit quiz
-      handleSelesai();
+      // Time's up - show popup
+      setShowTimeUpPopup(true);
       return;
     }
 
-    const timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
-    return () => clearInterval(timer);
-  }, [timeLeft, navigate, jawabanUser, materiSlug, materi, soalListRandom, loading]);
+    // Sync dengan server PERTAMA KALI saat component mount untuk handle refresh
+    const syncWithServer = async () => {
+      try {
+        const response = await apiService.getRemainingTime(sessionId);
+        if (response.status === "success" && response.data) {
+          const serverSisaWaktu = response.data.sisa_waktu;
+          
+          // Update timer dengan nilai AKTUAL dari server (untuk handle refresh)
+          console.log("🔄 Initial sync - Sisa waktu dari server:", serverSisaWaktu, "detik");
+          setTimeLeft(serverSisaWaktu);
+          
+          if (response.data.time_expired) {
+            setShowTimeUpPopup(true);
+            return;
+          }
+        }
+      } catch (error) {
+        console.error("❌ Error initial sync:", error);
+      }
+    };
+    
+    // Jalankan sync pertama kali
+    syncWithServer();
+
+    // Update timer setiap detik (countdown lokal)
+    const timer = setInterval(() => setTimeLeft((prev) => Math.max(0, prev - 1)), 1000);
+    
+    // Sync dengan server setiap 5 detik untuk akurasi
+    const syncTimer = setInterval(async () => {
+      if (sessionId) {
+        try {
+          const response = await apiService.getRemainingTime(sessionId);
+          if (response.status === "success" && response.data) {
+            const serverSisaWaktu = response.data.sisa_waktu;
+            
+            // Update timer dengan nilai dari server (koreksi drift)
+            console.log("🔄 Periodic sync - Sisa waktu dari server:", serverSisaWaktu, "detik");
+            setTimeLeft(serverSisaWaktu);
+            
+            if (response.data.time_expired) {
+              clearInterval(timer);
+              clearInterval(syncTimer);
+              setShowTimeUpPopup(true);
+            }
+          }
+        } catch (error) {
+          console.error("❌ Error syncing time:", error);
+        }
+      }
+    }, 5000); // Sync setiap 5 detik untuk lebih akurat
+
+    return () => {
+      clearInterval(timer);
+      clearInterval(syncTimer);
+    };
+  }, [sessionId, loading, soalListRandom.length]); // Removed timeLeft dari dependency
 
   const radius = 40;
   const stroke = 6;
   const normalizedRadius = radius - stroke * 2;
   const circumference = normalizedRadius * 2 * Math.PI;
-  const strokeDashoffset =
-    circumference - (timeLeft / TOTAL_TIME) * circumference;
+  
+  // Calculate progress based on timer mode
+  // PENTING: Gunakan waktuAwal (bukan totalWaktu) agar progress tidak reset setelah refresh
+  // Fallback: waktuAwal -> totalWaktu -> waktuPerSoal untuk menghindari division by zero
+  const maxTime = waktuAwal > 0 
+    ? waktuAwal 
+    : (totalWaktu > 0 ? totalWaktu : (timerMode === 'per_soal' ? waktuPerSoal : 60));
+  
+  // Progress = sisa waktu / total waktu (1 = penuh/hijau, 0 = habis/merah)
+  // Menggunakan timeLeft (sisa waktu) dibagi maxTime (waktu awal)
+  // Jika maxTime masih 0, gunakan 1 (100%) sebagai default agar tidak error
+  const progress = maxTime > 0 && timeLeft >= 0 ? timeLeft / maxTime : 1;
+  
+  // Debug log untuk tracking (uncomment jika perlu debugging)
+  // if (sessionId && timeLeft % 10 === 0) { // Log setiap 10 detik
+  //   console.log("⏱️ Timer State:", { 
+  //     timeLeft, 
+  //     maxTime, 
+  //     waktuAwal, 
+  //     totalWaktu,
+  //     progress: (progress * 100).toFixed(1) + '%',
+  //     color: getTimerColor()
+  //   });
+  // }
+  
+  // strokeDashoffset untuk SVG circle: semakin kecil = lebih banyak terisi
+  // Kita ingin: full time = full circle, no time = empty circle
+  const strokeDashoffset = circumference - (progress * circumference);
+  
+  // Dynamic color based on remaining time percentage
+  const getTimerColor = () => {
+    // Pastikan progress valid (0-1)
+    const validProgress = Math.max(0, Math.min(1, progress));
+    
+    if (validProgress > 0.5) return '#22c55e'; // Green (>50%)
+    if (validProgress > 0.25) return '#eab308'; // Yellow (25-50%)
+    return '#ef4444'; // Red (<25%)
+  };
+  
+  const timerColor = getTimerColor();
+  const isUrgent = progress <= 0.25; // Red zone
+  
+  // Format time display
+  const formatTime = (seconds) => {
+    if (timerMode === 'keseluruhan' && seconds > 60) {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${seconds}s`;
+  };
 
   const pilihJawaban = (opsi) => {
     const newJawaban = { ...jawabanUser, [soalAktif.id]: opsi };
@@ -201,11 +373,24 @@ export default function Soal() {
     console.log("✅ Jawaban dipilih:", opsi, "untuk soal ID:", soalAktif.id);
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentIndex < soalListRandom.length - 1) {
-      setCurrentIndex((prev) => prev + 1);
-      // Reset timer untuk soal berikutnya
-      setTimeLeft(TOTAL_TIME);
+      const nextIndex = currentIndex + 1;
+      setCurrentIndex(nextIndex);
+      
+      // Update progress ke server
+      if (sessionId) {
+        try {
+          await apiService.updateQuizProgress(sessionId, nextIndex);
+        } catch (error) {
+          console.error("❌ Error updating progress:", error);
+        }
+      }
+      
+      // Reset timer untuk soal berikutnya HANYA jika mode per_soal
+      if (timerMode === 'per_soal') {
+        setTimeLeft(waktuPerSoal);
+      }
     } else {
       // Soal terakhir, tampilkan popup konfirmasi
       setShowConfirmPopup(true);
@@ -214,18 +399,39 @@ export default function Soal() {
 
   const handleSelesai = async () => {
     try {
-      // Calculate results
+      // Calculate results dengan validasi yang ketat
       const benar = soalListRandom.filter((soal) => {
-        if (soal.jenis === "pilihan_ganda") return jawabanUser[soal.id] === soal.jawaban;
-        if (soal.jenis === "isian" && Array.isArray(soal.jawaban)) {
-          const userAnswer = (jawabanUser[soal.id] || "").trim().toLowerCase();
-          return soal.jawaban.some(jawab => jawab.trim().toLowerCase() === userAnswer);
+        const userAnswer = jawabanUser[soal.id];
+        const correctAnswer = soal.jawaban;
+        
+        // Validasi: jawaban user dan jawaban benar harus ada dan tidak kosong
+        if (!userAnswer || !correctAnswer) return false;
+        
+        // Validasi: jawaban tidak boleh hanya berisi karakter spesial atau whitespace
+        const cleanUserAnswer = userAnswer.trim();
+        if (!cleanUserAnswer || cleanUserAnswer === '-' || cleanUserAnswer.length === 0) return false;
+        
+        if (soal.jenis === "pilihan_ganda") {
+          return userAnswer === correctAnswer;
         }
-        return jawabanUser[soal.id]?.trim() === (soal.jawaban?.trim() || "");
+        
+        if (soal.jenis === "isian" && Array.isArray(correctAnswer)) {
+          const normalizedUserAnswer = cleanUserAnswer.toLowerCase();
+          return correctAnswer.some(jawab => {
+            const normalizedCorrectAnswer = jawab?.trim().toLowerCase();
+            return normalizedCorrectAnswer && normalizedUserAnswer === normalizedCorrectAnswer;
+          });
+        }
+        
+        // Single jawaban
+        const normalizedCorrectAnswer = correctAnswer?.trim();
+        if (!normalizedCorrectAnswer) return false;
+        
+        return cleanUserAnswer === normalizedCorrectAnswer;
       }).length;
 
       // Hitung waktu pengerjaan dalam detik
-      const waktuPengerjaanDetik = TOTAL_TIME - timeLeft;
+      const waktuPengerjaanDetik = totalWaktu - timeLeft;
       
       // Get data from location.state
       const nama_peserta = location.state?.nama || 'Anonymous';
@@ -234,19 +440,27 @@ export default function Soal() {
       const kumpulan_soal_id = quizData?.kumpulan_soal_id;
 
       if (kumpulan_soal_id) {
-        // Build jawaban detail array
+        // Build jawaban detail array dengan validasi yang sama
         const jawabanDetail = soalListRandom.map((soal) => {
           const userAnswer = jawabanUser[soal.id] || '';
+          const correctAnswer = soal.jawaban;
           let isCorrect = false;
           
-          if (soal.jenis === "pilihan_ganda") {
-            isCorrect = userAnswer === soal.jawaban;
-          } else if (soal.jenis === "isian" && Array.isArray(soal.jawaban)) {
-            isCorrect = soal.jawaban.some(jawab => 
-              jawab.trim().toLowerCase() === userAnswer.trim().toLowerCase()
-            );
+          // Validasi: jawaban tidak boleh kosong atau karakter spesial
+          const cleanUserAnswer = userAnswer.trim();
+          if (!cleanUserAnswer || cleanUserAnswer === '-' || !correctAnswer) {
+            isCorrect = false;
+          } else if (soal.jenis === "pilihan_ganda") {
+            isCorrect = userAnswer === correctAnswer;
+          } else if (soal.jenis === "isian" && Array.isArray(correctAnswer)) {
+            const normalizedUserAnswer = cleanUserAnswer.toLowerCase();
+            isCorrect = correctAnswer.some(jawab => {
+              const normalizedCorrectAnswer = jawab?.trim().toLowerCase();
+              return normalizedCorrectAnswer && normalizedUserAnswer === normalizedCorrectAnswer;
+            });
           } else {
-            isCorrect = userAnswer.trim() === (soal.jawaban?.trim() || "");
+            const normalizedCorrectAnswer = correctAnswer?.trim();
+            isCorrect = normalizedCorrectAnswer && cleanUserAnswer === normalizedCorrectAnswer;
           }
           
           return {
@@ -257,6 +471,7 @@ export default function Soal() {
         });
 
         const submitData = {
+          session_id: sessionId,
           nama_peserta,
           kumpulan_soal_id,
           skor: Math.round((benar / soalListRandom.length) * 100),
@@ -350,9 +565,10 @@ export default function Soal() {
           )}
           
           {/* Timer di Header */}
-          {soalListRandom.length > 0 && (
+          {soalListRandom.length > 0 && sessionId && (
             <div className="flex items-center gap-3">
-              <svg height={radius * 2} width={radius * 2} className={timeLeft <= 10 ? "animate-pulse" : ""}>
+              <svg height={radius * 2} width={radius * 2} className={isUrgent ? "animate-pulse" : ""}>
+                {/* Background circle */}
                 <circle
                   stroke="#e5e7eb"
                   fill="white"
@@ -361,28 +577,33 @@ export default function Soal() {
                   cx={radius}
                   cy={radius}
                 />
+                {/* Progress circle with dynamic color */}
                 <circle
-                  stroke={timeLeft <= 10 ? "#ef4444" : "#f97316"}
+                  stroke={timerColor}
                   fill="transparent"
                   strokeWidth={stroke}
                   strokeDasharray={`${circumference} ${circumference}`}
                   style={{
                     strokeDashoffset,
-                    transition: "stroke-dashoffset 1s linear",
-                    filter: timeLeft <= 10 ? "drop-shadow(0 0 8px rgba(239, 68, 68, 0.6))" : "drop-shadow(0 0 4px rgba(249, 115, 22, 0.4))"
+                    transition: "stroke-dashoffset 1s linear, stroke 0.5s ease",
+                    filter: isUrgent ? "drop-shadow(0 0 8px rgba(239, 68, 68, 0.6))" : "drop-shadow(0 0 4px rgba(34, 197, 94, 0.4))",
+                    transform: "rotate(-90deg)",
+                    transformOrigin: "50% 50%"
                   }}
                   r={normalizedRadius}
                   cx={radius}
                   cy={radius}
                 />
+                {/* Timer text */}
                 <text
                   x="50%"
                   y="50%"
                   dominantBaseline="middle"
                   textAnchor="middle"
-                  className={`text-lg font-bold ${timeLeft <= 10 ? "fill-red-600" : "fill-orange-600"}`}
+                  className="text-sm font-bold"
+                  style={{ fill: timerColor }}
                 >
-                  {timeLeft}s
+                  {formatTime(timeLeft)}
                 </text>
               </svg>
             </div>
@@ -395,8 +616,26 @@ export default function Soal() {
         <div className="bg-white/95 backdrop-blur-sm shadow-md py-3 px-4 border-b relative z-10">
           <div className="max-w-5xl mx-auto">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-bold text-gray-700">Soal {currentIndex + 1} dari {soalListRandom.length}</span>
-              <span className="text-sm font-semibold text-orange-600">{Math.round((currentIndex + 1) / soalListRandom.length * 100)}% Selesai</span>
+              <span className="text-sm font-bold text-gray-700">
+                Soal {currentIndex + 1} dari {soalListRandom.length}
+              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-semibold text-orange-600">
+                  {Math.round((currentIndex + 1) / soalListRandom.length * 100)}% Selesai
+                </span>
+                {/* Timer Progress Indicator */}
+                {sessionId && (
+                  <span 
+                    className="text-xs font-bold px-2 py-1 rounded-full transition-colors duration-500"
+                    style={{ 
+                      backgroundColor: timerColor + '20',
+                      color: timerColor 
+                    }}
+                  >
+                    ⏱️ {Math.round(progress * 100)}%
+                  </span>
+                )}
+              </div>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
               <div 
@@ -596,6 +835,51 @@ export default function Soal() {
                 ✓ Ya, Selesai
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Popup Waktu Habis */}
+      {showTimeUpPopup && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border-4 border-red-300 transform transition-all duration-300 animate-scaleIn">
+            {/* Icon */}
+            <div className="flex justify-center mb-4">
+              <div className="w-20 h-20 bg-gradient-to-br from-red-100 to-orange-100 rounded-full flex items-center justify-center animate-pulse">
+                <span className="text-5xl">⏰</span>
+              </div>
+            </div>
+
+            {/* Title */}
+            <h2 className="text-2xl font-black text-center text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-600 mb-3">
+              Waktu Habis!
+            </h2>
+
+            {/* Message */}
+            <p className="text-gray-600 text-center mb-6 font-medium">
+              Waktu pengerjaan quiz telah berakhir. Quiz Anda akan otomatis dikumpulkan sekarang.
+            </p>
+
+            {/* Info */}
+            <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 mb-6">
+              <div className="flex items-start gap-2">
+                <span className="text-2xl">ℹ️</span>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-red-800 mb-1">Informasi:</p>
+                  <p className="text-xs text-red-700">
+                    Semua jawaban yang telah Anda isi akan disimpan dan langsung diperiksa. Terima kasih telah mengerjakan quiz ini!
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Button */}
+            <button
+              onClick={handleSelesai}
+              className="w-full px-6 py-4 bg-gradient-to-r from-red-500 to-orange-600 hover:from-red-600 hover:to-orange-700 text-white rounded-2xl font-bold shadow-lg transition-all transform hover:scale-105 flex items-center justify-center gap-2"
+            >
+              <span className="text-lg">✓ Kumpulkan Quiz</span>
+            </button>
           </div>
         </div>
       )}

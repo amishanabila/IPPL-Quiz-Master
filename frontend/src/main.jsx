@@ -17,7 +17,9 @@ import Soal from "./soal/Soal.jsx";
 import LihatSoal from "./soal/LihatSoal.jsx";
 import BuatSoal from "./Buat Soal/BuatSoal.jsx";       
 import HasilAkhir from "./hasil akhir/HasilAkhir.jsx";
-import Leaderboard from "./leaderboard/Leaderboard.jsx"; 
+import Leaderboard from "./leaderboard/Leaderboard.jsx";
+import DashboardAdmin from "./admin/DashboardAdmin.jsx";
+import KelolaUsers from "./admin/KelolaUsers.jsx"; 
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
@@ -56,6 +58,10 @@ createRoot(document.getElementById("root")).render(
         <Route path="/lupa-password" element={<LupaPassword />} />
         <Route path="/password-baru" element={<PasswordBaru />} />
         <Route path="/profil" element={<Profil />} />
+
+        {/* Halaman Admin */}
+        <Route path="/dashboard-admin" element={<DashboardAdmin />} />
+        <Route path="/admin/users" element={<KelolaUsers />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>

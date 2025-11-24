@@ -28,13 +28,6 @@ export default function FormBuatSoal({
       gradient: 'from-green-500 to-green-600',
       icon: '🟢',
       label: 'Isian Singkat'
-    },
-    essay: {
-      border: 'border-purple-300',
-      bg: 'bg-purple-50',
-      gradient: 'from-purple-500 to-purple-600',
-      icon: '🟣',
-      label: 'Essay'
     }
   };
 
@@ -75,7 +68,6 @@ export default function FormBuatSoal({
         >
           <option value="pilihan_ganda">🔵 Pilihan Ganda - Peserta pilih satu jawaban benar</option>
           <option value="isian">🟢 Isian Singkat - Peserta ketik jawaban singkat</option>
-          <option value="essay">🟣 Essay - Peserta tulis jawaban panjang</option>
         </select>
         <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -128,6 +120,7 @@ export default function FormBuatSoal({
               <span>Pilih Gambar</span>
             </div>
             <input
+              key={soal.gambar ? 'has-image' : 'no-image'} // Reset input ketika gambar dihapus
               type="file"
               accept="image/*"
               onChange={(e) => {
@@ -135,6 +128,7 @@ export default function FormBuatSoal({
                 if (file) {
                   console.log('📁 File dipilih:', file.name, 'Size:', (file.size / 1024).toFixed(2) + 'KB');
                   handleUploadGambar(index, file);
+                  e.target.value = ''; // Reset value untuk allow re-upload file yang sama
                 }
               }}
               className="hidden"
@@ -409,42 +403,6 @@ export default function FormBuatSoal({
         </div>
       )}
 
-      {/* Essay - Enhanced */}
-      {soal.jenis === "essay" && (
-        <div className="mt-2">
-          <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-5">
-            <label className="block font-bold text-gray-800 mb-2 flex items-center gap-2 text-base">
-              <span className="text-xl">✅</span>
-              <span>Kunci Jawaban / Contoh Jawaban</span>
-              <span className="text-red-500 text-lg">*</span>
-            </label>
-            <p className="text-sm text-gray-600 mb-4 bg-white p-3 rounded-lg border border-purple-200">
-              💡 <strong>Tips:</strong> Berikan contoh jawaban yang lengkap sebagai panduan penilaian untuk essay.
-            </p>
-            <textarea
-              value={soal.jawaban}
-              onChange={(e) =>
-                handleJawabanChange(index, { huruf: "", text: e.target.value })
-              }
-              rows="5"
-              className={`border-2 p-4 rounded-xl w-full transition-all font-medium text-gray-700 ${
-                errors?.jawaban
-                  ? "border-red-500 focus:ring-4 focus:ring-red-100 focus:border-red-500 bg-red-50"
-                  : "border-gray-300 focus:border-purple-500 focus:ring-4 focus:ring-purple-100 hover:border-purple-300"
-              }`}
-              placeholder="Tulis contoh jawaban atau poin-poin kunci jawaban yang diharapkan..."
-            />
-            {errors?.jawaban && (
-              <div className="flex items-center gap-2 mt-3 text-red-600 bg-red-50 p-3 rounded-lg border border-red-200">
-                <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-                <p className="text-sm font-semibold">{errors.jawaban}</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

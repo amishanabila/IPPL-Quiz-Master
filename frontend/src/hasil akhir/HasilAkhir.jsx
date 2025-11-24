@@ -47,16 +47,34 @@ export default function HasilAkhir() {
 
   // Hitung skor → PG dan isian/essay jika jawaban cocok kunci
   const benar = soalList.filter((soal) => {
-    if (soal.jenis === "pilihan_ganda") return jawabanUser[soal.id] === soal.jawaban;
+    const userAnswer = jawabanUser[soal.id];
+    const correctAnswer = soal.jawaban;
+    
+    // Validasi: jawaban user dan jawaban benar harus ada dan tidak kosong
+    if (!userAnswer || !correctAnswer) return false;
+    
+    // Validasi: jawaban tidak boleh hanya berisi karakter spesial atau whitespace
+    const cleanUserAnswer = userAnswer.trim();
+    if (!cleanUserAnswer || cleanUserAnswer === '-' || cleanUserAnswer.length === 0) return false;
+    
+    if (soal.jenis === "pilihan_ganda") {
+      return userAnswer === correctAnswer;
+    }
     
     // Untuk isian singkat dengan multiple jawaban
-    if (soal.jenis === "isian" && Array.isArray(soal.jawaban)) {
-      const userAnswer = (jawabanUser[soal.id] || "").trim().toLowerCase();
-      return soal.jawaban.some(jawab => jawab.trim().toLowerCase() === userAnswer);
+    if (soal.jenis === "isian" && Array.isArray(correctAnswer)) {
+      const normalizedUserAnswer = cleanUserAnswer.toLowerCase();
+      return correctAnswer.some(jawab => {
+        const normalizedCorrectAnswer = jawab?.trim().toLowerCase();
+        return normalizedCorrectAnswer && normalizedUserAnswer === normalizedCorrectAnswer;
+      });
     }
     
     // Single jawaban (essay atau old format)
-    return jawabanUser[soal.id]?.trim() === (soal.jawaban?.trim() || ""); 
+    const normalizedCorrectAnswer = correctAnswer?.trim();
+    if (!normalizedCorrectAnswer) return false; // Jawaban benar tidak boleh kosong
+    
+    return cleanUserAnswer === normalizedCorrectAnswer;
   }).length;
 
   const total = soalList.length;
@@ -152,20 +170,47 @@ export default function HasilAkhir() {
           </h2>
           <div className="space-y-4">
             {soalList.map((soal, index) => {
-              const jawabanBenar = Array.isArray(soal.jawaban) 
-                ? soal.jawaban.join(" / ") 
-                : soal.jawaban || "-";
-              const jawabanKamu = jawabanUser[soal.id] || "-";
+              // Format jawaban benar untuk ditampilkan
+              let jawabanBenar;
+              if (Array.isArray(soal.jawaban)) {
+                jawabanBenar = soal.jawaban.filter(j => j && j.trim() && j.trim() !== '-').join(" / ");
+              } else if (soal.jawaban && soal.jawaban.trim() && soal.jawaban.trim() !== '-') {
+                jawabanBenar = soal.jawaban;
+              } else {
+                jawabanBenar = "(Jawaban tidak tersedia)";
+              }
+              
+              const jawabanKamu = jawabanUser[soal.id] || "(Tidak dijawab)";
               
               let isCorrect = false;
-              if (soal.jenis === "pilihan_ganda") {
-                isCorrect = jawabanKamu === soal.jawaban;
-              } else if (soal.jenis === "isian" && Array.isArray(soal.jawaban)) {
+              
+              // Get clean values
+              const cleanUserAnswer = jawabanKamu?.trim();
+              const correctAnswer = soal.jawaban;
+              
+              // Check if valid answers exist
+              const hasValidUserAnswer = cleanUserAnswer && cleanUserAnswer !== '-' && cleanUserAnswer.length > 0;
+              const hasValidCorrectAnswer = correctAnswer && 
+                (Array.isArray(correctAnswer) ? correctAnswer.length > 0 : (correctAnswer.trim() !== '' && correctAnswer.trim() !== '-'));
+              
+              // Calculate isCorrect
+              if (!hasValidUserAnswer) {
+                isCorrect = false; // User didn't answer or answered with invalid value
+              } else if (!hasValidCorrectAnswer) {
+                isCorrect = false; // No valid correct answer in database
+              } else if (soal.jenis === "pilihan_ganda") {
+                isCorrect = jawabanKamu === correctAnswer;
+              } else if (soal.jenis === "isian" && Array.isArray(correctAnswer)) {
                 // Check if user answer matches any of the accepted answers
-                const userAnswer = jawabanKamu.trim().toLowerCase();
-                isCorrect = soal.jawaban.some(jawab => jawab.trim().toLowerCase() === userAnswer);
+                const normalizedUserAnswer = cleanUserAnswer.toLowerCase();
+                isCorrect = correctAnswer.some(jawab => {
+                  const normalizedCorrectAnswer = jawab?.trim().toLowerCase();
+                  return normalizedCorrectAnswer && normalizedCorrectAnswer !== '-' && normalizedUserAnswer === normalizedCorrectAnswer;
+                });
               } else {
-                isCorrect = jawabanKamu.trim() === (soal.jawaban?.trim() || "");
+                // Single answer validation
+                const normalizedCorrectAnswer = correctAnswer?.trim();
+                isCorrect = normalizedCorrectAnswer && normalizedCorrectAnswer !== '-' && cleanUserAnswer === normalizedCorrectAnswer;
               }
 
               return (
@@ -230,7 +275,8 @@ export default function HasilAkhir() {
                       </p>
                     </div>
 
-                    {!isCorrect && (
+                    {/* Tampilkan jawaban benar HANYA jika user salah DAN jawaban benar tersedia */}
+                    {!isCorrect && jawabanBenar && jawabanBenar !== "(Jawaban tidak tersedia)" && (
                       <div className="p-4 rounded-lg bg-gradient-to-r from-green-100 to-emerald-100 border-2 border-green-300">
                         <p className="text-sm font-semibold text-gray-600 mb-1 flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-green-500"></span>
@@ -238,6 +284,19 @@ export default function HasilAkhir() {
                         </p>
                         <p className="font-bold text-lg text-green-700">
                           {jawabanBenar}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Peringatan jika jawaban benar tidak tersedia di database */}
+                    {!isCorrect && (!jawabanBenar || jawabanBenar === "(Jawaban tidak tersedia)") && (
+                      <div className="p-4 rounded-lg bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-300">
+                        <p className="text-sm font-semibold text-gray-600 mb-1 flex items-center gap-2">
+                          <span className="text-xl">⚠️</span>
+                          <span>Perhatian:</span>
+                        </p>
+                        <p className="font-medium text-sm text-orange-700">
+                          Jawaban benar tidak tersedia untuk soal ini. Silakan hubungi pembuat quiz.
                         </p>
                       </div>
                     )}
