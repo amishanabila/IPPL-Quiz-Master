@@ -48,10 +48,27 @@ export const authService = {
         // Store user data without foto
         const userData = { ...data.data.user };
         delete userData.foto;
+        
+        console.log('✅ AuthService - Data dari backend:', data.data.user);
+        console.log('👤 AuthService - Role dari backend:', data.data.user.role);
+        
         localStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
+        localStorage.setItem('userRole', userData.role); // Simpan role untuk validasi
         
         console.log('✅ AuthService - Token dan user data tersimpan');
-        console.log('✅ AuthService - User:', userData);
+        console.log('✅ AuthService - User data tersimpan:', userData);
+        console.log('👤 AuthService - User role tersimpan:', userData.role);
+        console.log('📦 AuthService - localStorage userRole:', localStorage.getItem('userRole'));
+        
+        // Verify storage
+        const verifyRole = localStorage.getItem('userRole');
+        if (verifyRole !== userData.role) {
+          console.error('❌ AuthService - Role mismatch!');
+          console.error('   Expected:', userData.role);
+          console.error('   Stored:', verifyRole);
+        } else {
+          console.log('✅ AuthService - Role verified:', verifyRole);
+        }
         
         // Return format yang sudah benar
         return {
@@ -73,9 +90,24 @@ export const authService = {
 
   // Logout user
   logout() {
+    console.log('🚪 AuthService - Logout, membersihkan semua data');
+    
     // Remove token and user data from storage
     localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(USER_DATA_KEY);
+    localStorage.removeItem('userRole');
+    
+    // Clear any other session data that might exist
+    localStorage.removeItem('loginDestination');
+    
+    // Clear window variables
+    if (window.autoRedirectTimer) {
+      clearTimeout(window.autoRedirectTimer);
+      window.autoRedirectTimer = null;
+    }
+    window.loginDestination = null;
+    
+    console.log('✅ AuthService - Semua data session berhasil dihapus');
   },
 
   // Request password reset
@@ -190,6 +222,17 @@ export const authService = {
   // Get auth token
   getToken() {
     return localStorage.getItem(AUTH_TOKEN_KEY);
+  },
+
+  // Check if user is admin
+  isAdmin() {
+    const role = localStorage.getItem('userRole');
+    return role === 'admin';
+  },
+
+  // Get user role
+  getUserRole() {
+    return localStorage.getItem('userRole');
   }
 };
 

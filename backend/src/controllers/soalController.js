@@ -7,8 +7,16 @@ const soalController = {
     
     try {
       const { kategori_id, soal_list, waktu_per_soal, waktu_keseluruhan, tipe_waktu, materi_id } = req.body;
+      
+      // 🔥 DEBUG: Log req.user untuk debugging
+      console.log('🔍 DEBUG - req.user:', req.user);
+      console.log('🔍 DEBUG - req.user.id:', req.user?.id);
+      
       const created_by = req.user.id; // From auth middleware
       const updated_by = req.user.id;
+      
+      console.log('🔍 DEBUG - created_by value:', created_by);
+      console.log('🔍 DEBUG - updated_by value:', updated_by);
 
       // Get judul from materi if materi_id is provided
       let judul = req.body.judul || null;
@@ -23,11 +31,25 @@ const soalController = {
       await connection.beginTransaction();
 
       try {
+        // 🔥 DEBUG: Log SQL parameters
+        console.log('🔍 DEBUG - SQL INSERT parameters:', {
+          judul,
+          kategori_id,
+          materi_id: materi_id || null,
+          created_by,
+          updated_by,
+          waktu_per_soal: waktu_per_soal || 60,
+          waktu_keseluruhan: waktu_keseluruhan || null,
+          tipe_waktu: tipe_waktu || 'per_soal'
+        });
+        
         // Create kumpulan_soal entry dengan timing options
         const [kumpulanResult] = await connection.query(
           'INSERT INTO kumpulan_soal (judul, kategori_id, materi_id, created_by, updated_by, waktu_per_soal, waktu_keseluruhan, tipe_waktu) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
           [judul, kategori_id, materi_id || null, created_by, updated_by, waktu_per_soal || 60, waktu_keseluruhan || null, tipe_waktu || 'per_soal']
         );
+        
+        console.log('✅ DEBUG - INSERT success, insertId:', kumpulanResult.insertId);
 
         const kumpulan_soal_id = kumpulanResult.insertId;
 

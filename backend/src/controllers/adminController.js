@@ -156,14 +156,18 @@ const getBackupInfo = async (req, res) => {
   }
 };
 
-// Get all users with statistics
+// Get all users with statistics (including peserta from quiz_session)
 const getAllUsers = async (req, res) => {
   try {
-    const [results] = await db.execute('CALL sp_admin_get_users()');
+    console.log('📊 Getting all users including peserta...');
+    const [results] = await db.execute('CALL sp_admin_get_all_users_with_peserta()');
+    
+    const users = results[0] || [];
+    console.log(`✅ Found ${users.length} users (Admin + Kreator + Peserta)`);
     
     res.json({
       success: true,
-      data: results[0] || []
+      data: users
     });
   } catch (error) {
     console.error('Error getting all users:', error);
@@ -241,6 +245,45 @@ const deleteUser = async (req, res) => {
   }
 };
 
+// Fix missing creators (assign orphaned data to default kreator)
+const fixMissingCreators = async (req, res) => {
+  try {
+    const [results] = await db.execute('CALL sp_admin_fix_missing_creators()');
+    
+    res.json({
+      success: true,
+      message: 'Data creator berhasil diperbaiki',
+      data: results[0] && results[0][0] ? results[0][0] : {}
+    });
+  } catch (error) {
+    console.error('Error fixing missing creators:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Terjadi kesalahan saat memperbaiki data creator',
+      error: error.message
+    });
+  }
+};
+
+// Get orphaned data (data without valid creator)
+const getOrphanedData = async (req, res) => {
+  try {
+    const [results] = await db.execute('CALL sp_admin_get_orphaned_data()');
+    
+    res.json({
+      success: true,
+      data: results[0] || []
+    });
+  } catch (error) {
+    console.error('Error getting orphaned data:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Terjadi kesalahan saat mengambil data orphaned',
+      error: error.message
+    });
+  }
+};
+
 module.exports = {
   getSystemOverview,
   getHealthCheck,
@@ -251,5 +294,7 @@ module.exports = {
   getBackupInfo,
   getAllUsers,
   updateUserRole,
-  deleteUser
+  deleteUser,
+  fixMissingCreators,
+  getOrphanedData
 };

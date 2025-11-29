@@ -440,10 +440,32 @@ const quizController = {
     const connection = await db.getConnection();
     
     try {
+      console.log('📥 Received quiz submission request:', {
+        session_id: req.body.session_id,
+        nama_peserta: req.body.nama_peserta,
+        kumpulan_soal_id: req.body.kumpulan_soal_id,
+        skor: req.body.skor,
+        jawaban_benar: req.body.jawaban_benar,
+        total_soal: req.body.total_soal,
+        waktu_pengerjaan: req.body.waktu_pengerjaan, // 🔥 Added for debug
+        pin_code: req.body.pin_code,
+        jawaban_detail_count: req.body.jawaban_detail?.length || 0
+      });
+      
       const { session_id, nama_peserta, kumpulan_soal_id, skor, jawaban_benar, total_soal, waktu_pengerjaan, pin_code, jawaban_detail } = req.body;
+      
+      // 🔥 CRITICAL DEBUG: Check waktu_pengerjaan value
+      console.log('🔍 DEBUG waktu_pengerjaan:', {
+        type: typeof waktu_pengerjaan,
+        value: waktu_pengerjaan,
+        isNull: waktu_pengerjaan === null,
+        isUndefined: waktu_pengerjaan === undefined,
+        isNumber: !isNaN(waktu_pengerjaan)
+      });
 
       // Validasi input
       if (!nama_peserta || !kumpulan_soal_id || skor === undefined) {
+        console.log('❌ Validation failed: Missing required fields');
         return res.status(400).json({
           status: 'error',
           message: 'Data tidak lengkap'

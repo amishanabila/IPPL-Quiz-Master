@@ -34,7 +34,13 @@ exports.getLeaderboard = async (req, res) => {
 
     // Filter by materi jika diperlukan (post-filter karena tidak ada SP khusus)
     if (materi_id && results) {
-      results = results.filter(r => r.materi_id == materi_id);
+      console.log('🔍 Filtering by materi_id:', materi_id);
+      console.log('📊 Before filter:', results.length, 'entries');
+      results = results.filter(r => {
+        console.log('  - Entry:', r.nama_peserta, 'materi_id:', r.materi_id, 'matches?', r.materi_id == materi_id);
+        return r.materi_id == materi_id;
+      });
+      console.log('📊 After filter:', results.length, 'entries');
     }
 
     console.log('✅ Found', results.length, 'leaderboard entries');

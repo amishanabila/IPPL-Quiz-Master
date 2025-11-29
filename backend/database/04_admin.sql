@@ -50,7 +50,7 @@ LEFT JOIN kumpulan_soal ks ON u.id = ks.created_by
 LEFT JOIN soal s ON ks.kumpulan_soal_id = s.kumpulan_soal_id
 LEFT JOIN kategori k ON u.id = k.created_by
 LEFT JOIN materi m ON u.id = m.created_by
-GROUP BY u.id;
+GROUP BY u.id, u.nama, u.email, u.role, u.is_verified, u.created_at;
 
 -- View: Quiz Activity Statistics
 DROP VIEW IF EXISTS v_admin_quiz_activity;
@@ -60,10 +60,11 @@ SELECT
     ks.judul as kumpulan_soal_judul,
     ks.pin_code,
     k.nama_kategori,
-    u.nama as created_by_name,
+    COALESCE(u.nama, 'Sistem') as created_by_name,
+    ks.created_by as created_by_id,
     ks.jumlah_soal,
     COUNT(DISTINCT hq.hasil_id) as total_peserta,
-    AVG(hq.skor) as rata_rata_skor,
+    ROUND(AVG(hq.skor), 2) as rata_rata_skor,
     MAX(hq.skor) as skor_tertinggi,
     MIN(hq.skor) as skor_terendah,
     ks.created_at
@@ -71,7 +72,7 @@ FROM kumpulan_soal ks
 JOIN kategori k ON ks.kategori_id = k.id
 LEFT JOIN users u ON ks.created_by = u.id
 LEFT JOIN hasil_quiz hq ON ks.kumpulan_soal_id = hq.kumpulan_soal_id AND hq.completed_at IS NOT NULL
-GROUP BY ks.kumpulan_soal_id;
+GROUP BY ks.kumpulan_soal_id, ks.judul, ks.pin_code, k.nama_kategori, u.nama, ks.created_by, ks.jumlah_soal, ks.created_at;
 
 -- ============================================================================
 -- STORED PROCEDURES UNTUK ADMIN - MONITORING SISTEM
@@ -107,14 +108,20 @@ END //
 -- Procedure: Get Quiz Activity Report
 DROP PROCEDURE IF EXISTS sp_admin_get_quiz_activity //
 CREATE PROCEDURE sp_admin_get_quiz_activity(
+    IN p_days INT,
     IN p_limit INT
 )
 BEGIN
+    IF p_days IS NULL OR p_days <= 0 THEN
+        SET p_days = 30;
+    END IF;
+    
     IF p_limit IS NULL OR p_limit <= 0 THEN
         SET p_limit = 50;
     END IF;
     
     SELECT * FROM v_admin_quiz_activity
+    WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL p_days DAY)
     ORDER BY created_at DESC
     LIMIT p_limit;
 END //
@@ -141,8 +148,8 @@ BEGIN
 END //
 
 -- Procedure: Get System Health Check
-DROP PROCEDURE IF EXISTS sp_admin_system_health_check //
-CREATE PROCEDURE sp_admin_system_health_check()
+DROP PROCEDURE IF EXISTS sp_admin_health_check //
+CREATE PROCEDURE sp_admin_health_check()
 BEGIN
     -- Check soal tanpa jawaban benar (invalid)
     SELECT 
@@ -167,11 +174,11 @@ BEGIN
     
     UNION ALL
     
-    -- Check expired sessions (more than 24 hours)
+    -- Check expired sessions (session aktif yang melewati batas waktu)
     SELECT 
-        'Expired Active Sessions' as check_type,
+        'Session Kadaluarsa' as check_type,
         COUNT(*) as count,
-        CASE WHEN COUNT(*) > 0 THEN 'WARNING' ELSE 'OK' END as status
+        CASE WHEN COUNT(*) > 0 THEN 'INFO' ELSE 'OK' END as status
     FROM quiz_session
     WHERE is_active = TRUE
       AND waktu_batas < NOW()
@@ -192,6 +199,26 @@ END //
 -- ============================================================================
 
 -- Procedure: Get All Users
+DROP PROCEDURE IF EXISTS sp_admin_get_users //
+CREATE PROCEDURE sp_admin_get_users()
+BEGIN
+    SELECT 
+        u.id,
+        u.nama,
+        u.email,
+        u.telepon,
+        u.role,
+        u.is_verified,
+        u.created_at,
+        u.updated_at,
+        COUNT(DISTINCT ks.kumpulan_soal_id) as total_kumpulan_soal
+    FROM users u
+    LEFT JOIN kumpulan_soal ks ON u.id = ks.created_by
+    GROUP BY u.id, u.nama, u.email, u.telepon, u.role, u.is_verified, u.created_at, u.updated_at
+    ORDER BY u.created_at DESC;
+END //
+
+-- Procedure: Get All Users (with filter)
 DROP PROCEDURE IF EXISTS sp_admin_get_all_users //
 CREATE PROCEDURE sp_admin_get_all_users(
     IN p_role VARCHAR(20)
@@ -231,6 +258,22 @@ BEGIN
     VALUES (p_nama, p_email, p_password, p_role, COALESCE(p_is_verified, FALSE));
     
     SELECT * FROM users WHERE id = LAST_INSERT_ID();
+END //
+
+-- Procedure: Update User Role
+DROP PROCEDURE IF EXISTS sp_admin_update_user_role //
+CREATE PROCEDURE sp_admin_update_user_role(
+    IN p_user_id INT,
+    IN p_new_role VARCHAR(20)
+)
+BEGIN
+    UPDATE users
+    SET 
+        role = p_new_role,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = p_user_id;
+    
+    SELECT ROW_COUNT() as affected_rows;
 END //
 
 -- Procedure: Update User
@@ -332,9 +375,35 @@ BEGIN
     ORDER BY created_at DESC;
 END //
 
--- Procedure: Export All Hasil Quiz
+-- Procedure: Export All Hasil Quiz (without params for API compatibility)
 DROP PROCEDURE IF EXISTS sp_admin_export_hasil_quiz //
-CREATE PROCEDURE sp_admin_export_hasil_quiz(
+CREATE PROCEDURE sp_admin_export_hasil_quiz()
+BEGIN
+    SELECT 
+        hq.hasil_id,
+        hq.nama_peserta,
+        hq.skor,
+        hq.jawaban_benar,
+        hq.total_soal,
+        hq.waktu_pengerjaan,
+        hq.completed_at,
+        ks.judul as kumpulan_soal_judul,
+        ks.pin_code,
+        k.nama_kategori,
+        m.judul as materi,
+        u.nama as created_by_kreator
+    FROM hasil_quiz hq
+    JOIN kumpulan_soal ks ON hq.kumpulan_soal_id = ks.kumpulan_soal_id
+    JOIN kategori k ON ks.kategori_id = k.id
+    LEFT JOIN materi m ON ks.materi_id = m.materi_id
+    LEFT JOIN users u ON ks.created_by = u.id
+    WHERE hq.completed_at IS NOT NULL
+    ORDER BY hq.completed_at DESC;
+END //
+
+-- Procedure: Export All Hasil Quiz (with date filter)
+DROP PROCEDURE IF EXISTS sp_admin_export_hasil_quiz_filtered //
+CREATE PROCEDURE sp_admin_export_hasil_quiz_filtered(
     IN p_start_date DATE,
     IN p_end_date DATE
 )
@@ -486,6 +555,25 @@ BEGIN
         'Invalid soal have been deleted and counts updated' as message;
 END //
 
+-- Procedure: Get Backup Info
+DROP PROCEDURE IF EXISTS sp_admin_get_backup_info //
+CREATE PROCEDURE sp_admin_get_backup_info()
+BEGIN
+    SELECT 
+        'quiz_master' as database_name,
+        NOW() as last_backup_time,
+        (SELECT COUNT(*) FROM users) as total_users,
+        (SELECT COUNT(*) FROM kategori) as total_kategori,
+        (SELECT COUNT(*) FROM materi) as total_materi,
+        (SELECT COUNT(*) FROM kumpulan_soal) as total_kumpulan_soal,
+        (SELECT COUNT(*) FROM soal) as total_soal,
+        (SELECT COUNT(*) FROM quiz_session) as total_sessions,
+        (SELECT COUNT(*) FROM hasil_quiz) as total_hasil_quiz,
+        (SELECT COUNT(*) FROM user_answers) as total_user_answers,
+        DATABASE() as current_database,
+        VERSION() as mysql_version;
+END //
+
 -- Procedure: Generate Backup Info
 DROP PROCEDURE IF EXISTS sp_admin_generate_backup_info //
 CREATE PROCEDURE sp_admin_generate_backup_info()
@@ -503,6 +591,111 @@ BEGIN
         (SELECT COUNT(*) FROM user_answers) as total_user_answers,
         DATABASE() as current_database,
         VERSION() as mysql_version;
+END //
+
+-- ============================================================================
+-- UTILITY PROCEDURES - DATA MAINTENANCE
+-- ============================================================================
+
+-- Procedure: Fix Missing Creator Data
+DROP PROCEDURE IF EXISTS sp_admin_fix_missing_creators //
+CREATE PROCEDURE sp_admin_fix_missing_creators()
+BEGIN
+    -- Update semua data yang tidak punya created_by
+    -- Coba assign ke user kreator pertama (sebagai default)
+    DECLARE first_kreator_id INT;
+    DECLARE rows_kumpulan_soal INT DEFAULT 0;
+    DECLARE rows_materi INT DEFAULT 0;
+    DECLARE rows_kategori INT DEFAULT 0;
+    
+    SELECT id INTO first_kreator_id 
+    FROM users 
+    WHERE role = 'kreator' 
+    ORDER BY created_at ASC 
+    LIMIT 1;
+    
+    IF first_kreator_id IS NOT NULL THEN
+        -- Fix kumpulan_soal
+        UPDATE kumpulan_soal 
+        SET created_by = first_kreator_id,
+            updated_by = first_kreator_id
+        WHERE created_by IS NULL;
+        SET rows_kumpulan_soal = ROW_COUNT();
+        
+        -- Fix materi
+        UPDATE materi 
+        SET created_by = first_kreator_id
+        WHERE created_by IS NULL;
+        SET rows_materi = ROW_COUNT();
+        
+        -- Fix kategori
+        UPDATE kategori 
+        SET created_by = first_kreator_id
+        WHERE created_by IS NULL;
+        SET rows_kategori = ROW_COUNT();
+        
+        SELECT 
+            rows_kumpulan_soal as kumpulan_soal_updated,
+            rows_materi as materi_updated,
+            rows_kategori as kategori_updated,
+            (rows_kumpulan_soal + rows_materi + rows_kategori) as total_updated,
+            first_kreator_id as assigned_to_kreator_id,
+            (SELECT nama FROM users WHERE id = first_kreator_id) as kreator_nama;
+    ELSE
+        SELECT 
+            0 as kumpulan_soal_updated,
+            0 as materi_updated,
+            0 as kategori_updated,
+            0 as total_updated,
+            'No kreator found in system' as message;
+    END IF;
+END //
+
+-- Procedure: Get Orphaned Data (data without valid creator)
+DROP PROCEDURE IF EXISTS sp_admin_get_orphaned_data //
+CREATE PROCEDURE sp_admin_get_orphaned_data()
+BEGIN
+    -- Kumpulan soal without valid creator
+    SELECT 
+        'kumpulan_soal' as table_name,
+        ks.kumpulan_soal_id as record_id,
+        ks.judul as record_title,
+        ks.created_by as creator_id,
+        ks.created_at
+    FROM kumpulan_soal ks
+    LEFT JOIN users u ON ks.created_by = u.id
+    WHERE ks.created_by IS NULL 
+       OR u.id IS NULL
+    
+    UNION ALL
+    
+    -- Kategori without valid creator
+    SELECT 
+        'kategori' as table_name,
+        k.id as record_id,
+        k.nama_kategori as record_title,
+        k.created_by as creator_id,
+        k.created_at
+    FROM kategori k
+    LEFT JOIN users u ON k.created_by = u.id
+    WHERE k.created_by IS NULL 
+       OR u.id IS NULL
+    
+    UNION ALL
+    
+    -- Materi without valid creator
+    SELECT 
+        'materi' as table_name,
+        m.materi_id as record_id,
+        m.judul as record_title,
+        m.created_by as creator_id,
+        m.created_at
+    FROM materi m
+    LEFT JOIN users u ON m.created_by = u.id
+    WHERE m.created_by IS NULL 
+       OR u.id IS NULL
+    
+    ORDER BY created_at DESC;
 END //
 
 DELIMITER ;

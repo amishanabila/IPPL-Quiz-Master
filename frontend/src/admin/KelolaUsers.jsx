@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Header from '../header/Header';
+import HeaderAdmin from '../header/HeaderAdmin';
 import Footer from '../footer/Footer';
 import { ArrowLeft, Users, Edit2, Trash2, Search } from 'lucide-react';
 
@@ -19,7 +19,7 @@ function KelolaUsers() {
     const userRole = localStorage.getItem('userRole');
     if (userRole !== 'admin') {
       alert('Akses ditolak. Halaman ini hanya untuk admin.');
-      navigate('/dashboard-admin');
+      navigate('/admin/dashboard');
       return;
     }
 
@@ -33,17 +33,26 @@ function KelolaUsers() {
   const loadUsers = async () => {
     try {
       setLoading(true);
+      const token = localStorage.getItem('authToken');
+      
+      console.log('🔑 Loading users with token:', token ? 'Token exists' : 'No token');
+      
       const response = await fetch(`${API_BASE_URL}/admin/users`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         }
       });
 
+      console.log('📊 Users response status:', response.status);
+
       if (response.ok) {
         const data = await response.json();
+        console.log('✅ Users data loaded:', data);
         setUsers(data.data || []);
       } else {
-        alert('Gagal memuat data users');
+        const errorData = await response.json();
+        console.error('❌ Users load error:', errorData);
+        alert(`Gagal memuat data users: ${errorData.message || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Error loading users:', error);
@@ -65,7 +74,7 @@ function KelolaUsers() {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(user =>
-        user.username?.toLowerCase().includes(query) ||
+        user.nama?.toLowerCase().includes(query) ||
         user.email?.toLowerCase().includes(query)
       );
     }
@@ -79,10 +88,11 @@ function KelolaUsers() {
     }
 
     try {
+      const token = localStorage.getItem('authToken');
       const response = await fetch(`${API_BASE_URL}/admin/users/role`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ userId, newRole })
@@ -108,10 +118,11 @@ function KelolaUsers() {
     }
 
     try {
+      const token = localStorage.getItem('authToken');
       const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         }
       });
 
@@ -151,13 +162,13 @@ function KelolaUsers() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
+      <HeaderAdmin />
       
       <main className="container mx-auto px-4 py-8 max-w-7xl">
         {/* Header */}
         <div className="mb-8">
           <button
-            onClick={() => navigate('/dashboard-admin')}
+            onClick={() => navigate('/admin/dashboard')}
             className="flex items-center text-blue-600 hover:text-blue-700 mb-4"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -219,18 +230,20 @@ function KelolaUsers() {
               </thead>
               <tbody>
                 {filteredUsers.length > 0 ? (
-                  filteredUsers.map((user) => (
-                    <tr key={user.user_id} className="border-b border-gray-100 hover:bg-gray-50">
+                  filteredUsers.map((user, index) => (
+                    <tr key={user.id || `peserta-${index}`} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-4 px-6">
-                        <div className="font-medium text-gray-900">{user.username}</div>
-                        <div className="text-xs text-gray-500">ID: {user.user_id}</div>
+                        <div className="font-medium text-gray-900">{user.nama}</div>
+                        <div className="text-xs text-gray-500">
+                          {user.id ? `ID: ${user.id}` : 'Peserta (via PIN)'}
+                        </div>
                       </td>
-                      <td className="py-4 px-6 text-gray-700">{user.email}</td>
+                      <td className="py-4 px-6 text-gray-700">{user.email || '-'}</td>
                       <td className="py-4 px-6">
-                        {editingUser === user.user_id ? (
+                        {editingUser === user.id && user.id ? (
                           <select
                             defaultValue={user.role}
-                            onChange={(e) => handleUpdateRole(user.user_id, e.target.value)}
+                            onChange={(e) => handleUpdateRole(user.id, e.target.value)}
                             className="px-3 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                           >
                             <option value="admin">Admin</option>
@@ -246,27 +259,33 @@ function KelolaUsers() {
                         )}
                       </td>
                       <td className="py-4 px-6 text-center text-gray-700">
-                        {user.total_quiz_created || 0}
+                        {user.total_kumpulan_soal || 0}
                       </td>
                       <td className="py-4 px-6 text-center text-gray-700">
-                        {user.total_soal_created || 0}
+                        {user.role === 'peserta' ? '-' : (user.total_kumpulan_soal || 0)}
                       </td>
                       <td className="py-4 px-6">
                         <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => setEditingUser(editingUser === user.user_id ? null : user.user_id)}
-                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                            title="Edit role"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteUser(user.user_id, user.username)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Hapus user"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {user.id ? (
+                            <>
+                              <button
+                                onClick={() => setEditingUser(editingUser === user.id ? null : user.id)}
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Edit role"
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteUser(user.id, user.nama)}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Hapus user"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-xs text-gray-400 italic">Read-only</span>
+                          )}
                         </div>
                       </td>
                     </tr>

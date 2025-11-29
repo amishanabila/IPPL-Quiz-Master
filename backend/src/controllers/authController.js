@@ -40,9 +40,15 @@ const authController = {
         [nama, email, hashedPassword]
       );
 
-      // Generate token
+      // Get the created user to get role
+      const [newUser] = await db.query(
+        'SELECT id, nama, email, role, is_verified FROM users WHERE id = ?',
+        [result.insertId]
+      );
+
+      // Generate token with role
       const token = jwt.sign(
-        { userId: result.insertId, email },
+        { userId: result.insertId, email, role: newUser[0].role },
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
       );
@@ -55,6 +61,7 @@ const authController = {
             id: result.insertId,
             nama,
             email,
+            role: newUser[0].role,
             is_verified: true
           },
           token
@@ -109,9 +116,9 @@ const authController = {
         });
       }
 
-      // Generate token
+      // Generate token with role
       const token = jwt.sign(
-        { userId: user.id, email: user.email },
+        { userId: user.id, email: user.email, role: user.role },
         process.env.JWT_SECRET,
         { expiresIn: '24h' }
       );

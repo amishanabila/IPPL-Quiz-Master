@@ -29,6 +29,30 @@ export default function BuatSoal() {
   const [kategoriFromAPI, setKategoriFromAPI] = useState([]); // kategori from API
   const [showEditSuccess, setShowEditSuccess] = useState(false); // 🔥 popup edit sukses
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // 🔥 popup konfirmasi hapus soal terakhir
+  const [draftKey, setDraftKey] = useState(""); // localStorage key untuk draft
+
+  // 🔥 VALIDATION: Check if user is kreator
+  React.useEffect(() => {
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+    const token = localStorage.getItem('authToken');
+    
+    console.log('🔍 BuatSoal - Checking user role:', userData.role);
+    
+    if (!token || !userData.id) {
+      alert('❌ Anda harus login terlebih dahulu untuk membuat soal');
+      navigate('/login', { replace: true });
+      return;
+    }
+    
+    if (userData.role !== 'kreator') {
+      alert('❌ Error: Halaman ini hanya untuk KREATOR!\n\nAnda login sebagai: ' + (userData.role || 'unknown') + '\n\nSilakan login dengan akun kreator untuk membuat soal.');
+      console.error('❌ Access denied: User role is', userData.role, 'but kreator required');
+      navigate('/', { replace: true });
+      return;
+    }
+    
+    console.log('✅ User is kreator, access granted');
+  }, [navigate]);
 
   // Load kategori from API
   React.useEffect(() => {
@@ -45,6 +69,75 @@ export default function BuatSoal() {
     };
     loadKategori();
   }, []);
+
+  // Load draft dari localStorage (untuk create mode)
+  React.useEffect(() => {
+    if (isEditMode || pinCode) return; // Skip jika edit mode atau sudah berhasil dibuat
+
+    const key = "quizDraft_" + (localStorage.getItem('userData') ? JSON.parse(localStorage.getItem('userData')).id : 'guest');
+    setDraftKey(key);
+
+    const draft = localStorage.getItem(key);
+    if (draft) {
+      try {
+        const draftData = JSON.parse(draft);
+        console.log("📂 Loading draft from localStorage");
+        
+        // Restore form data
+        if (draftData.kategori) setKategori(draftData.kategori);
+        if (draftData.kategoriCustom) {
+          setKategoriCustom(draftData.kategoriCustom);
+          setShowKategoriInput(true);
+        }
+        if (draftData.materi) setMateri(draftData.materi);
+        if (draftData.jumlahSoal) setJumlahSoal(draftData.jumlahSoal);
+        if (draftData.tipeWaktu) setTipeWaktu(draftData.tipeWaktu);
+        if (draftData.waktuPerSoal) setWaktuPerSoal(draftData.waktuPerSoal);
+        if (draftData.waktuKeseluruhan) setWaktuKeseluruhan(draftData.waktuKeseluruhan);
+        if (draftData.soalList && draftData.soalList.length > 0) {
+          setSoalList(draftData.soalList);
+          console.log("✅ Restored", draftData.soalList.length, "soal from draft");
+        }
+      } catch (error) {
+        console.error("❌ Error loading draft:", error);
+      }
+    }
+  }, [isEditMode, pinCode]);
+
+  // Save draft ke localStorage setiap ada perubahan (untuk create mode)
+  React.useEffect(() => {
+    if (isEditMode || pinCode || !draftKey) return; // Skip jika edit mode atau sudah berhasil dibuat
+
+    const saveDraft = () => {
+      const draftData = {
+        kategori,
+        kategoriCustom,
+        materi,
+        jumlahSoal,
+        tipeWaktu,
+        waktuPerSoal,
+        waktuKeseluruhan,
+        soalList,
+        savedAt: new Date().toISOString()
+      };
+      
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(draftData));
+        console.log("💾 Draft saved to localStorage");
+      } catch (error) {
+        console.error("❌ Error saving draft:", error);
+        // Jika error (mungkin karena localStorage penuh), hapus draft lama
+        if (error.name === 'QuotaExceededError') {
+          console.log("⚠️ localStorage full, clearing draft");
+          localStorage.removeItem(draftKey);
+        }
+      }
+    };
+
+    // Debounce save (tunggu 1 detik setelah perubahan terakhir)
+    const timeoutId = setTimeout(saveDraft, 1000);
+    return () => clearTimeout(timeoutId);
+  }, [kategori, kategoriCustom, materi, jumlahSoal, tipeWaktu, waktuPerSoal, waktuKeseluruhan, soalList, isEditMode, pinCode, draftKey]);
 
   // Load data untuk edit mode dari location.state
   React.useEffect(() => {
@@ -207,7 +300,41 @@ export default function BuatSoal() {
     setSoalList(updated);
   };
 
-  const handleUploadGambar = (index, file) => {
+  const compressImage = (file, maxWidth = 800, quality = 0.8) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          
+          // Scale down jika terlalu besar
+          if (width > maxWidth) {
+            height = (height * maxWidth) / width;
+            width = maxWidth;
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Convert ke base64 dengan kompresi
+          const compressedBase64 = canvas.toDataURL(file.type, quality);
+          resolve(compressedBase64);
+        };
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleUploadGambar = async (index, file) => {
     if (file === null) {
       // Hapus gambar
       const updated = [...soalList];
@@ -230,23 +357,24 @@ export default function BuatSoal() {
     }
     
     console.log('📤 Memproses gambar untuk soal', index + 1, '...');
+    console.log('📊 Ukuran asli:', (file.size / 1024).toFixed(2), 'KB');
     
-    // Konversi gambar ke base64
-    const reader = new FileReader();
-    reader.onloadend = () => {
+    try {
+      // Kompress gambar untuk mengurangi ukuran
+      const compressedBase64 = await compressImage(file, 800, 0.8);
+      
       setSoalList(prevList => {
         const updated = [...prevList];
-        updated[index].gambar = reader.result; // base64 string
+        updated[index].gambar = compressedBase64;
         console.log('✅ Gambar berhasil diupload untuk soal', index + 1);
-        console.log('📊 Base64 length:', reader.result.length);
+        console.log('📊 Ukuran compressed:', (compressedBase64.length / 1024).toFixed(2), 'KB');
+        console.log('📉 Compression ratio:', ((1 - (compressedBase64.length / (file.size * 1.37))) * 100).toFixed(1) + '%');
         return updated;
       });
-    };
-    reader.onerror = () => {
-      console.error('❌ Gagal membaca file gambar');
-      alert('Gagal membaca file gambar');
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('❌ Gagal memproses gambar:', error);
+      alert('Gagal memproses gambar. Coba lagi.');
+    }
   };
 
   const handleOpsiChange = (soalIndex, opsiIndex, value) => {
@@ -545,6 +673,12 @@ export default function BuatSoal() {
         if (newPin) {
           console.log("✅ PIN berhasil dibuat (auto-generated):", newPin);
           setPinCode(newPin);
+          
+          // Hapus draft dari localStorage setelah berhasil
+          if (draftKey) {
+            localStorage.removeItem(draftKey);
+            console.log("🗑️ Draft cleared from localStorage");
+          }
           
           setLoading(false);
           

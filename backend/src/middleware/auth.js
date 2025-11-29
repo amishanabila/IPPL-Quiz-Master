@@ -6,6 +6,7 @@ const authenticateToken = (req, res, next) => {
         // Get token from header
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            console.log('❌ AUTH - No token provided');
             return res.status(401).json({
                 success: false,
                 message: 'No token provided'
@@ -20,8 +21,15 @@ const authenticateToken = (req, res, next) => {
         // Add user data to request
         req.user = decoded;
         
+        console.log('✅ AUTH - Token verified, user:', {
+            id: decoded.id,
+            email: decoded.email,
+            role: decoded.role
+        });
+        
         next();
     } catch (error) {
+        console.log('❌ AUTH - Token validation failed:', error.message);
         res.status(401).json({
             success: false,
             message: 'Token is not valid'

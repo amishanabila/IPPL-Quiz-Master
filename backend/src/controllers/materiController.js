@@ -65,10 +65,11 @@ const materiController = {
   async createMateri(req, res) {
     try {
       const { judul, kategori_id, isi_materi } = req.body;
+      const created_by = req.user?.id; // Get user ID from auth middleware
 
       const [result] = await db.query(
-        'INSERT INTO materi (judul, kategori_id, isi_materi) VALUES (?, ?, ?)',
-        [judul, kategori_id, isi_materi]
+        'INSERT INTO materi (judul, kategori_id, isi_materi, created_by) VALUES (?, ?, ?, ?)',
+        [judul, kategori_id, isi_materi, created_by]
       );
 
       res.status(201).json({
@@ -78,7 +79,8 @@ const materiController = {
           id: result.insertId,
           judul,
           kategori_id,
-          isi_materi
+          isi_materi,
+          created_by
         }
       });
     } catch (error) {
@@ -95,6 +97,7 @@ const materiController = {
     try {
       const { id } = req.params;
       const { judul, kategori_id, isi_materi } = req.body;
+      // Note: We keep the original created_by, only update content
 
       const [result] = await db.query(
         'UPDATE materi SET judul = ?, kategori_id = ?, isi_materi = ? WHERE materi_id = ?',

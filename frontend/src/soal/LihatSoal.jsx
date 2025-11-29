@@ -9,6 +9,7 @@ export default function LihatSoal() {
   const location = useLocation();
   const [soalList, setSoalList] = useState([]);
   const [materiName, setMateriName] = useState("");
+  const [pinCode, setPinCode] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -34,6 +35,12 @@ export default function LihatSoal() {
         if (response.status === "success" && response.data && response.data.soal_list) {
           const soalFromAPI = response.data.soal_list;
           console.log("📖 Soal from API:", soalFromAPI.length);
+          
+          // Set PIN code dari response
+          if (response.data.pin_code) {
+            setPinCode(response.data.pin_code);
+            console.log("📌 PIN Code:", response.data.pin_code);
+          }
           
           if (soalFromAPI.length > 0) {
             // Transform backend format to frontend format
@@ -157,8 +164,32 @@ export default function LihatSoal() {
 
           {/* Info Materi */}
           <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-6 mb-6 border-2 border-orange-200">
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">{materiName}</h2>
-            <p className="text-gray-600 font-medium">📝 Total: {soalList.length} soal</p>
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">{materiName}</h2>
+                <p className="text-gray-600 font-medium">📝 Total: {soalList.length} soal</p>
+              </div>
+              
+              {/* PIN Display */}
+              {pinCode && (
+                <div className="bg-gradient-to-br from-orange-500 to-yellow-500 rounded-xl p-4 shadow-lg border-2 border-orange-300 min-w-[200px]">
+                  <div className="flex items-center gap-2 mb-1">
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                    </svg>
+                    <p className="text-white text-sm font-semibold">PIN Kuis</p>
+                  </div>
+                  <div className="bg-white rounded-lg p-3 mt-2">
+                    <p className="text-2xl font-bold text-center text-orange-600 tracking-wider">
+                      {pinCode}
+                    </p>
+                  </div>
+                  <p className="text-white text-xs mt-2 text-center">
+                    Bagikan PIN ini ke peserta
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Daftar Soal */}

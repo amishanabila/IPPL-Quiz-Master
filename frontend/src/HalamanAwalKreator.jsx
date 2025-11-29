@@ -1,4 +1,6 @@
-import React from "react";
+import React, { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { authService } from "./services/authService";
 import Header from "./header/Header";
 import KumpulanMateri from "./materi/KumpulanMateri";
 import BannerBuatSoal from "./Buat Soal/BannerBuatSoal";
@@ -6,6 +8,58 @@ import BannerLeaderboard from "./leaderboard/BannerLeaderboard";
 import Footer from "./footer/Footer";
 
 export default function HalamanAwal() {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // VALIDASI AUTENTIKASI DAN ROLE - HARUS ADA TOKEN DAN ROLE KREATOR
+    console.log('🔒 HalamanAwalKreator - Validasi akses');
+    
+    // Cek apakah user sudah login
+    if (!authService.isAuthenticated()) {
+      console.log('❌ HalamanAwalKreator - User belum login');
+      alert('Anda harus login terlebih dahulu');
+      navigate('/login', { replace: true });
+      return;
+    }
+
+    // Cek token
+    const token = authService.getToken();
+    if (!token) {
+      console.log('❌ HalamanAwalKreator - Token tidak ditemukan');
+      authService.logout();
+      alert('Sesi anda telah berakhir, silakan login kembali');
+      navigate('/login', { replace: true });
+      return;
+    }
+
+    // Cek role
+    const userRole = authService.getUserRole();
+    const userData = authService.getCurrentUser();
+    const actualRole = userRole || userData?.role;
+    
+    console.log('👤 HalamanAwalKreator - User role:', actualRole);
+    console.log('👤 HalamanAwalKreator - User data:', userData);
+    
+    // Jika admin, redirect ke dashboard admin
+    if (actualRole === 'admin') {
+      console.log('🔄 HalamanAwalKreator - User adalah admin, redirect ke dashboard');
+      alert('Anda adalah admin. Redirect ke dashboard admin.');
+      navigate('/admin/dashboard', { replace: true });
+      return;
+    }
+    
+    // Jika bukan kreator, logout
+    if (actualRole !== 'kreator') {
+      console.log('❌ HalamanAwalKreator - Role tidak valid:', actualRole);
+      alert('Akses ditolak. Halaman ini untuk kreator.');
+      authService.logout();
+      navigate('/login', { replace: true });
+      return;
+    }
+
+    console.log('✅ HalamanAwalKreator - Validasi berhasil');
+  }, [navigate]);
+
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-yellow-300 via-yellow-200 to-orange-200 relative overflow-hidden">
       {/* Animated Background Circles */}

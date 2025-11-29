@@ -13,13 +13,19 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
 
-  // Check if already logged in
+  // Check if already logged in - HANYA check, tidak auto redirect
+  // Biarkan ProtectedRoute yang handle redirect
   useEffect(() => {
     if (authService.isAuthenticated()) {
-      console.log("ℹ️ User sudah login, redirect ke halaman kreator");
-      navigate('/halaman-awal-kreator', { replace: true });
+      const userRole = authService.getUserRole();
+      const userData = authService.getCurrentUser();
+      const actualRole = userRole || userData?.role;
+      
+      console.log("ℹ️ Login.jsx - User sudah login dengan role:", actualRole);
+      // Tidak auto redirect, biarkan user klik login atau akses langsung halaman lain
+      // ProtectedRoute akan handle redirect yang benar
     }
-  }, [navigate]);
+  }, []);
 
   // Cleanup timer saat component unmount
   useEffect(() => {
@@ -31,6 +37,16 @@ export default function Login() {
   }, []);
 
   const togglePassword = () => setShowPassword(!showPassword);
+
+  const handleEmailChange = (e) => {
+    setEmail(e.target.value);
+    if (errors.email) setErrors({ ...errors, email: "" });
+  };
+
+  const handlePasswordChange = (e) => {
+    setPassword(e.target.value);
+    if (errors.password) setErrors({ ...errors, password: "" });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -68,10 +84,29 @@ export default function Login() {
       if (response.status === 'success' || response.success) {
         console.log("✅ Login berhasil, menampilkan popup");
         
-        // Semua yang login dianggap sebagai kreator/pembuat soal
-        const destination = '/halaman-awal-kreator';
+        // Tentukan destination berdasarkan role
+        const userRole = response.data?.user?.role;
+        const storedRole = localStorage.getItem('userRole');
         
-        console.log("🎯 Destination:", destination);
+        console.log("👤 User role dari response:", userRole);
+        console.log("👤 User role dari localStorage:", storedRole);
+        console.log("📦 Full user data:", response.data?.user);
+        
+        let destination;
+        
+        if (userRole === 'admin') {
+          destination = '/admin/dashboard';
+          console.log("👑 Admin login, redirect ke /admin/dashboard");
+        } else if (userRole === 'kreator') {
+          destination = '/halaman-awal-kreator';
+          console.log("✏️ Kreator login, redirect ke /halaman-awal-kreator");
+        } else {
+          // Fallback: jika role tidak jelas, default ke kreator
+          destination = '/halaman-awal-kreator';
+          console.log("⚠️ Role tidak jelas, default ke /halaman-awal-kreator");
+        }
+        
+        console.log("🎯 Final destination:", destination);
         
         setShowPopup(true);
         
@@ -103,16 +138,6 @@ export default function Login() {
     }
   };
 
-  const handleEmailChange = (e) => {
-    setEmail(e.target.value);
-    if (errors.email) setErrors({ ...errors, email: "" });
-  };
-
-  const handlePasswordChange = (e) => {
-    setPassword(e.target.value);
-    if (errors.password) setErrors({ ...errors, password: "" });
-  };
-
   const handlePopupClose = () => {
     console.log("🔘 User klik Oke di popup");
     
@@ -123,11 +148,18 @@ export default function Login() {
     
     setShowPopup(false);
     
-    // Get destination from stored value or determine from user data
-    const destination = window.loginDestination || '/halaman-awal-kreator';
+    // Get destination from stored value
+    let destination = window.loginDestination;
+    
+    // If no stored destination, determine from current localStorage
+    if (!destination) {
+      const userRole = localStorage.getItem('userRole');
+      destination = userRole === 'admin' ? '/admin/dashboard' : '/halaman-awal-kreator';
+      console.log("⚠️ No stored destination, determined from role:", userRole, "→", destination);
+    }
     
     // Redirect immediately
-    console.log("➡️ Redirect ke", destination);
+    console.log("➡️ Manual redirect ke", destination);
     navigate(destination, { replace: true });
   };
 

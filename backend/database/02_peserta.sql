@@ -278,7 +278,9 @@ BEGIN
         hq.waktu_pengerjaan,
         hq.completed_at,
         ks.judul as kumpulan_soal_judul,
+        ks.kategori_id,
         k.nama_kategori as kategori,
+        ks.materi_id,
         m.judul as materi,
         (@rank := @rank + 1) as ranking
     FROM hasil_quiz hq
@@ -313,7 +315,9 @@ BEGIN
         hq.waktu_pengerjaan,
         hq.completed_at,
         ks.judul as kumpulan_soal_judul,
+        ks.kategori_id,
         k.nama_kategori as kategori,
+        ks.materi_id,
         m.judul as materi,
         (@rank := @rank + 1) as ranking
     FROM hasil_quiz hq
@@ -387,6 +391,93 @@ DELIMITER ;
 -- CALL sp_peserta_get_active_session('John Doe', '123456');
 
 -- ============================================================================
+-- ADMIN VIEWS - PESERTA STATISTICS
+-- ============================================================================
+-- Section ini untuk admin dashboard - melihat statistik peserta
+-- Terintegrasi dengan admin user management
+-- ============================================================================
+
+DELIMITER //
+
+-- Procedure: Get Peserta Stats (for admin dashboard)
+DROP PROCEDURE IF EXISTS sp_admin_get_peserta_stats //
+CREATE PROCEDURE sp_admin_get_peserta_stats()
+BEGIN
+    SELECT 
+        (@row_number := @row_number + 1) as id,
+        nama_peserta as nama,
+        'peserta' as role,
+        NULL as email,
+        NULL as telepon,
+        TRUE as is_verified,
+        first_attempt as created_at,
+        last_attempt as updated_at,
+        total_quiz_taken as total_kumpulan_soal
+    FROM (
+        SELECT 
+            nama_peserta,
+            MIN(created_at) as first_attempt,
+            MAX(created_at) as last_attempt,
+            COUNT(DISTINCT kumpulan_soal_id) as total_quiz_taken
+        FROM quiz_session
+        GROUP BY nama_peserta
+    ) peserta_data,
+    (SELECT @row_number := 0) as t
+    ORDER BY first_attempt DESC;
+END //
+
+-- Procedure: Get ALL Users (Admin + Kreator + Peserta)
+-- Dipanggil dari: Admin Dashboard -> User Management
+DROP PROCEDURE IF EXISTS sp_admin_get_all_users_with_peserta //
+CREATE PROCEDURE sp_admin_get_all_users_with_peserta()
+BEGIN
+    -- Get admin and kreator from users table
+    SELECT 
+        u.id,
+        u.nama,
+        u.email,
+        u.telepon,
+        u.role,
+        u.is_verified,
+        u.created_at,
+        u.updated_at,
+        COUNT(DISTINCT ks.kumpulan_soal_id) as total_kumpulan_soal
+    FROM users u
+    LEFT JOIN kumpulan_soal ks ON u.id = ks.created_by
+    GROUP BY u.id, u.nama, u.email, u.telepon, u.role, u.is_verified, u.created_at, u.updated_at
+    
+    UNION ALL
+    
+    -- Get peserta from quiz_session (peserta don't have user_id)
+    SELECT 
+        NULL as id,
+        nama_peserta as nama,
+        NULL as email,
+        NULL as telepon,
+        'peserta' as role,
+        TRUE as is_verified,
+        MIN(created_at) as created_at,
+        MAX(created_at) as updated_at,
+        COUNT(DISTINCT kumpulan_soal_id) as total_kumpulan_soal
+    FROM quiz_session
+    GROUP BY nama_peserta
+    
+    ORDER BY created_at DESC;
+END //
+
+DELIMITER ;
+
+-- ============================================================================
+-- VERIFICATION QUERIES (Optional - untuk testing manual)
+-- ============================================================================
+
+-- Test peserta stats
+-- CALL sp_admin_get_peserta_stats();
+
+-- Test all users including peserta
+-- CALL sp_admin_get_all_users_with_peserta();
+
+-- ============================================================================
 -- PESERTA DATABASE COMPLETE
 -- ✅ Stored procedures untuk use case peserta
 -- ✅ Validate PIN dan akses quiz
@@ -394,4 +485,5 @@ DELIMITER ;
 -- ✅ Submit jawaban dan hasil quiz
 -- ✅ Lihat hasil akhir dan ranking
 -- ✅ Lihat leaderboard (all/by kategori)
+-- ✅ Admin views untuk peserta statistics (2025-11-29)
 -- ============================================================================

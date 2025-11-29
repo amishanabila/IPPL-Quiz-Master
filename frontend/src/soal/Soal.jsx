@@ -23,6 +23,14 @@ export default function Soal() {
   const [jawabanUser, setJawabanUser] = useState({});
   const [showConfirmPopup, setShowConfirmPopup] = useState(false);
   const soalAktif = soalListRandom[currentIndex];
+  
+  // Generate unique key untuk localStorage berdasarkan session
+  const getStorageKey = () => {
+    const stateData = location.state;
+    const pin = stateData?.pin || 'unknown';
+    const nama = stateData?.nama || 'anonymous';
+    return `quiz_jawaban_${pin}_${nama}`;
+  };
 
   // --- SESSION-BASED TIMER (Server timestamp) ---
   const [sessionId, setSessionId] = useState(null);
@@ -75,12 +83,19 @@ export default function Soal() {
                 ? sessionData.waktu_per_soal 
                 : sessionData.total_waktu;
               
+              console.log("⏱️ ========== TIMER INITIALIZATION ==========");
+              console.log("⏱️ Timer mode:", sessionData.tipe_waktu);
+              console.log("⏱️ Total waktu (initial):", initialTotalWaktu, "detik");
+              console.log("⏱️ Sisa waktu (from server):", sessionData.sisa_waktu, "detik");
+              console.log("⏱️ Waktu per soal:", sessionData.waktu_per_soal, "detik");
+              console.log("⏱️ Is resume:", sessionData.is_resume);
+              
               // Set semua state timer secara berurutan
               // PENTING: Set dalam urutan yang benar agar progress calculation tidak error
               setTimerMode(sessionData.tipe_waktu || 'keseluruhan');
               setWaktuPerSoal(sessionData.waktu_per_soal || 60);
-              setTotalWaktu(initialTotalWaktu); // Total waktu (bisa berubah per soal)
-              setWaktuAwal(initialTotalWaktu);  // Waktu awal yang TIDAK BERUBAH untuk progress bar
+              setTotalWaktu(sessionData.total_waktu || initialTotalWaktu); // Total waktu dari server (akurat)
+              setWaktuAwal(sessionData.total_waktu || initialTotalWaktu);  // Waktu awal yang TIDAK BERUBAH untuk progress bar
               setTimeLeft(sessionData.sisa_waktu); // Sisa waktu dari server
               setSessionId(sessionData.session_id); // Session ID terakhir agar timer effect berjalan
               
@@ -90,11 +105,9 @@ export default function Soal() {
                 setCurrentIndex(sessionData.current_soal_index || 0);
               }
               
-              console.log("⏱️ Timer mode:", sessionData.tipe_waktu);
-              console.log("⏱️ Waktu awal (total):", initialTotalWaktu, "detik");
-              console.log("⏱️ Sisa waktu:", sessionData.sisa_waktu, "detik");
-              console.log("⏱️ Waktu terpakai:", initialTotalWaktu - sessionData.sisa_waktu, "detik");
-              console.log("⏱️ Progress (sisa/total):", (sessionData.sisa_waktu / initialTotalWaktu * 100).toFixed(1) + "%");
+              console.log("✅ Timer initialized successfully");
+              console.log("⏱️ Progress (sisa/total):", (sessionData.sisa_waktu / (sessionData.total_waktu || initialTotalWaktu) * 100).toFixed(1) + "%");
+              console.log("⏱️ ==========================================");
               
               // Transform and load soal
               const soalFromAPI = sessionData.soal;
@@ -136,12 +149,23 @@ export default function Soal() {
                 setSoalListRandom(transformedSoal);
               }
             } else if (sessionResponse.timeExpired) {
-              // Waktu sudah habis
-              alert("Waktu pengerjaan quiz sudah habis!");
-              navigate(-1);
+              // Waktu sudah habis - JANGAN navigate(-1), langsung ke hasil jika ada data
+              console.log("⏰ Session expired - checking for existing hasil data");
+              alert("Waktu pengerjaan quiz sudah habis! Menampilkan hasil yang tersimpan...");
+              
+              // Cek localStorage untuk hasil yang mungkin sudah tersimpan
+              const savedHasil = localStorage.getItem('hasilQuiz');
+              if (savedHasil) {
+                console.log("✅ Found saved hasil, navigating to hasil-akhir");
+                navigate("/hasil-akhir");
+              } else {
+                console.log("⚠️ No saved hasil found, going back");
+                navigate(-1);
+              }
             }
           } catch (error) {
             console.error("❌ Error starting quiz session:", error);
+            console.error("❌ Error stack:", error.stack);
             alert("Gagal memulai quiz. Silakan coba lagi.");
             navigate(-1);
           }
@@ -244,6 +268,41 @@ export default function Soal() {
     loadSoalFromAPI();
   }, [location.state, slug]); // Add slug to dependencies
 
+  // Restore jawaban dari localStorage saat component mount atau refresh
+  useEffect(() => {
+    if (soalListRandom.length > 0) {
+      const storageKey = getStorageKey();
+      const savedJawaban = localStorage.getItem(storageKey);
+      
+      if (savedJawaban) {
+        try {
+          const parsedJawaban = JSON.parse(savedJawaban);
+          console.log('🔄 Restoring jawaban from localStorage:', parsedJawaban);
+          setJawabanUser(parsedJawaban);
+          
+          // Hitung jumlah soal yang sudah dijawab
+          const answeredCount = Object.keys(parsedJawaban).length;
+          console.log(`✅ Restored ${answeredCount} jawaban`);
+        } catch (e) {
+          console.error('❌ Error parsing saved jawaban:', e);
+        }
+      }
+    }
+  }, [soalListRandom]);
+
+  // Save jawaban ke localStorage setiap kali jawabanUser berubah
+  useEffect(() => {
+    if (Object.keys(jawabanUser).length > 0) {
+      const storageKey = getStorageKey();
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(jawabanUser));
+        console.log('💾 Jawaban saved to localStorage:', Object.keys(jawabanUser).length, 'soal');
+      } catch (e) {
+        console.error('❌ Error saving jawaban to localStorage:', e);
+      }
+    }
+  }, [jawabanUser]);
+
   // Timer effect - sync dengan server
   useEffect(() => {
     if (soalListRandom.length === 0 || loading || !sessionId) return;
@@ -257,21 +316,34 @@ export default function Soal() {
     // Sync dengan server PERTAMA KALI saat component mount untuk handle refresh
     const syncWithServer = async () => {
       try {
+        console.log("🔄 ========== TIMER SYNC START ==========");
+        console.log("🔄 Session ID:", sessionId);
+        
         const response = await apiService.getRemainingTime(sessionId);
+        console.log("🔄 Server response:", response);
+        
         if (response.status === "success" && response.data) {
           const serverSisaWaktu = response.data.sisa_waktu;
           
           // Update timer dengan nilai AKTUAL dari server (untuk handle refresh)
           console.log("🔄 Initial sync - Sisa waktu dari server:", serverSisaWaktu, "detik");
+          console.log("🔄 Current timeLeft:", timeLeft, "detik");
+          console.log("🔄 Difference:", Math.abs(timeLeft - serverSisaWaktu), "detik");
+          
           setTimeLeft(serverSisaWaktu);
           
           if (response.data.time_expired) {
+            console.log("⏰ WAKTU HABIS - Menampilkan popup");
             setShowTimeUpPopup(true);
             return;
           }
+        } else {
+          console.error("❌ Unexpected response format:", response);
         }
+        console.log("🔄 ========== TIMER SYNC END ==========");
       } catch (error) {
         console.error("❌ Error initial sync:", error);
+        console.error("❌ Error details:", error.message);
       }
     };
     
@@ -279,9 +351,17 @@ export default function Soal() {
     syncWithServer();
 
     // Update timer setiap detik (countdown lokal)
-    const timer = setInterval(() => setTimeLeft((prev) => Math.max(0, prev - 1)), 1000);
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        const newTime = Math.max(0, prev - 1);
+        if (newTime === 0) {
+          console.log("⏰ Timer reached 0 - waktu habis!");
+        }
+        return newTime;
+      });
+    }, 1000);
     
-    // Sync dengan server setiap 5 detik untuk akurasi
+    // Sync dengan server setiap 10 detik untuk akurasi (dikurangi frekuensi untuk performance)
     const syncTimer = setInterval(async () => {
       if (sessionId) {
         try {
@@ -289,11 +369,17 @@ export default function Soal() {
           if (response.status === "success" && response.data) {
             const serverSisaWaktu = response.data.sisa_waktu;
             
-            // Update timer dengan nilai dari server (koreksi drift)
-            console.log("🔄 Periodic sync - Sisa waktu dari server:", serverSisaWaktu, "detik");
+            // Only log if there's significant drift (>2 seconds)
+            const drift = Math.abs(timeLeft - serverSisaWaktu);
+            if (drift > 2) {
+              console.log("🔄 Periodic sync - Correcting drift:", drift, "detik");
+              console.log("🔄 Server time:", serverSisaWaktu, "Local time:", timeLeft);
+            }
+            
             setTimeLeft(serverSisaWaktu);
             
-            if (response.data.time_expired) {
+            if (response.data.time_expired || serverSisaWaktu <= 0) {
+              console.log("⏰ Server reported time expired");
               clearInterval(timer);
               clearInterval(syncTimer);
               setShowTimeUpPopup(true);
@@ -303,7 +389,7 @@ export default function Soal() {
           console.error("❌ Error syncing time:", error);
         }
       }
-    }, 5000); // Sync setiap 5 detik untuk lebih akurat
+    }, 10000); // Sync setiap 10 detik (lebih efficient)
 
     return () => {
       clearInterval(timer);
@@ -374,31 +460,56 @@ export default function Soal() {
   };
 
   const handleNext = async () => {
-    if (currentIndex < soalListRandom.length - 1) {
-      const nextIndex = currentIndex + 1;
-      setCurrentIndex(nextIndex);
+    try {
+      console.log('🔄 handleNext called - Current index:', currentIndex, 'Total soal:', soalListRandom.length);
       
-      // Update progress ke server
-      if (sessionId) {
-        try {
-          await apiService.updateQuizProgress(sessionId, nextIndex);
-        } catch (error) {
-          console.error("❌ Error updating progress:", error);
+      if (currentIndex < soalListRandom.length - 1) {
+        const nextIndex = currentIndex + 1;
+        console.log('➡️ Moving to next soal:', nextIndex);
+        setCurrentIndex(nextIndex);
+        
+        // Update progress ke server
+        if (sessionId) {
+          try {
+            await apiService.updateQuizProgress(sessionId, nextIndex);
+            console.log('✅ Progress updated to index:', nextIndex);
+          } catch (error) {
+            console.error("❌ Error updating progress:", error);
+          }
         }
+        
+        // Reset timer untuk soal berikutnya HANYA jika mode per_soal
+        if (timerMode === 'per_soal') {
+          setTimeLeft(waktuPerSoal);
+          console.log('⏱️ Timer reset for next soal:', waktuPerSoal, 'seconds');
+        }
+      } else {
+        // Soal terakhir, tampilkan popup konfirmasi
+        console.log('🏁 Last soal reached - Showing confirmation popup');
+        setShowConfirmPopup(true);
+        console.log('✅ Confirmation popup state set to true');
       }
-      
-      // Reset timer untuk soal berikutnya HANYA jika mode per_soal
-      if (timerMode === 'per_soal') {
-        setTimeLeft(waktuPerSoal);
-      }
-    } else {
-      // Soal terakhir, tampilkan popup konfirmasi
-      setShowConfirmPopup(true);
+    } catch (error) {
+      console.error('❌ ERROR in handleNext:', error);
+      console.error('❌ Error stack:', error.stack);
+      // Don't navigate away on error, just log it
     }
   };
 
   const handleSelesai = async () => {
+    console.log('🎯 ========== handleSelesai CALLED ==========');
+    console.log('🎯 Function triggered from:', new Error().stack?.split('\n')[2]);
+    console.log('🎯 Current location:', window.location.pathname);
+    
     try {
+      console.log('🎯 ========== STARTING QUIZ SUBMISSION ==========');
+      console.log('📊 Total soal:', soalListRandom.length);
+      console.log('✍️ Jawaban user:', jawabanUser);
+      console.log('⏱️ Total waktu:', totalWaktu, 'detik');
+      console.log('⏱️ Sisa waktu:', timeLeft, 'detik');
+      console.log('📍 Materi slug:', materiSlug);
+      console.log('📂 Kategori:', materi?.kategori);
+      
       // Calculate results dengan validasi yang ketat
       const benar = soalListRandom.filter((soal) => {
         const userAnswer = jawabanUser[soal.id];
@@ -430,8 +541,24 @@ export default function Soal() {
         return cleanUserAnswer === normalizedCorrectAnswer;
       }).length;
 
+      console.log('✅ Jawaban benar:', benar, 'dari', soalListRandom.length);
+      console.log('📊 Skor:', Math.round((benar / soalListRandom.length) * 100), '%');
+
       // Hitung waktu pengerjaan dalam detik
-      const waktuPengerjaanDetik = totalWaktu - timeLeft;
+      let waktuPengerjaanDetik = totalWaktu - timeLeft;
+      
+      // 🔥 CRITICAL FIX: Ensure waktu_pengerjaan is valid
+      console.log('⏱️ DEBUG - totalWaktu:', totalWaktu, 'timeLeft:', timeLeft);
+      console.log('⏱️ DEBUG - waktuPengerjaanDetik (calculated):', waktuPengerjaanDetik);
+      
+      // Fallback: jika waktu tidak valid, gunakan waktu default atau actual elapsed time
+      if (!waktuPengerjaanDetik || waktuPengerjaanDetik <= 0 || isNaN(waktuPengerjaanDetik)) {
+        console.warn('⚠️ Invalid waktu_pengerjaan, using fallback');
+        // Fallback: gunakan totalWaktu jika ada, atau 60 detik
+        waktuPengerjaanDetik = totalWaktu > 0 ? totalWaktu : 60;
+      }
+      
+      console.log('⏱️ Waktu pengerjaan (final):', waktuPengerjaanDetik, 'detik');
       
       // Get data from location.state
       const nama_peserta = location.state?.nama || 'Anonymous';
@@ -482,32 +609,163 @@ export default function Soal() {
           jawaban_detail: jawabanDetail
         };
 
-        await apiService.submitQuiz(submitData);
+        console.log('📤 Submitting quiz data to backend:', submitData);
+        
+        try {
+          const response = await apiService.submitQuiz(submitData);
+          console.log('✅ Quiz submission response:', response);
+          
+          if (response.status === 'error') {
+            console.error('❌ Backend returned error:', response.message);
+            // Don't alert - it will block the flow, just log
+            console.warn('⚠️ Result will be displayed but not saved to database');
+          } else {
+            console.log('✅ Quiz result saved successfully with hasil_id:', response.data?.hasil_id);
+          }
+        } catch (backendError) {
+          console.error('❌ Backend submission failed:', backendError);
+          console.warn('⚠️ Continuing with local display only');
+          // Don't throw - continue to show hasil
+        }
+      }
+
+      // Prepare hasil data dengan validasi lengkap
+      const hasilData = {
+        materi: materiSlug || materi?.materi || 'Quiz',
+        kategori: materi?.kategori || 'Kategori',
+        soalList: soalListRandom,
+        jawabanUser,
+        skor: Math.round((benar / soalListRandom.length) * 100),
+        benar: benar,
+        total: soalListRandom.length
+      };
+      
+      // IMPORTANT: Preserve isPeserta flag for FlexibleRoute
+      const isPeserta = location.state?.isPeserta === true;
+      console.log('📋 isPeserta flag:', isPeserta, '(from location.state)');
+
+      console.log('📦 Hasil data prepared:', {
+        materi: hasilData.materi,
+        kategori: hasilData.kategori,
+        soalCount: hasilData.soalList.length,
+        jawabanCount: Object.keys(hasilData.jawabanUser).length,
+        skor: hasilData.skor,
+        benar: hasilData.benar
+      });
+
+      // Validasi data sebelum save
+      if (!hasilData.soalList || hasilData.soalList.length === 0) {
+        console.error('❌ ERROR: soalList is empty!');
+        alert('Error: Data soal tidak ditemukan. Silakan coba lagi.');
+        return;
+      }
+
+      // Save to localStorage as backup
+      try {
+        localStorage.setItem('hasilQuiz', JSON.stringify(hasilData));
+        console.log('✅ Hasil quiz saved to localStorage successfully');
+        console.log('💾 Data size:', new Blob([JSON.stringify(hasilData)]).size, 'bytes');
+        
+        // Clear jawaban temp storage karena quiz sudah selesai
+        const storageKey = getStorageKey();
+        localStorage.removeItem(storageKey);
+        console.log('🗑️ Cleared temporary jawaban from localStorage');
+      } catch (storageError) {
+        console.error('❌ Failed to save to localStorage:', storageError);
+      }
+
+      // Validate navigation is safe
+      if (!hasilData || !hasilData.soalList || hasilData.soalList.length === 0) {
+        console.error('❌ CRITICAL: Cannot navigate - hasilData is invalid');
+        alert('Error: Data hasil tidak valid. Silakan coba lagi.');
+        return;
       }
 
       // Navigate with results
-      navigate("/hasil-akhir", {
-        state: {
-          hasil: {
-            materi: materiSlug,
-            kategori: materi?.kategori,
-            soalList: soalListRandom,
-            jawabanUser,
-          }
-        }
-      });
+      console.log('🚀 Navigating to /hasil-akhir with data...');
+      console.log('🚀 Navigation target: /hasil-akhir');
+      console.log('🚀 Navigation state:', { hasil: hasilData });
+      
+      try {
+        // CRITICAL: Pass isPeserta flag to allow FlexibleRoute access
+        const navigationState = {
+          hasil: hasilData,
+          isPeserta: isPeserta, // Preserve peserta flag for route access
+          nama: location.state?.nama // Preserve nama for reference
+        };
+        
+        console.log('🚀 Navigation state:', navigationState);
+        
+        navigate("/hasil-akhir", {
+          state: navigationState,
+          replace: false
+        });
+        console.log('✅ Navigation initiated successfully');
+      } catch (navError) {
+        console.error('❌ Navigation failed:', navError);
+        alert('Error navigasi. Periksa console untuk detail.');
+      }
+      
+      console.log('🎯 ========== QUIZ SUBMISSION COMPLETE ==========');
     } catch (error) {
-      console.error('Error submitting quiz:', error);
-      // Still navigate even if submission fails
-      navigate("/hasil-akhir", {
-        state: {
-          hasil: {
-            materi: materiSlug,
-            kategori: materi?.kategori,
-            soalList: soalListRandom,
-            jawabanUser,
-          }
+      console.error('❌ ========== ERROR IN QUIZ SUBMISSION ==========');
+      console.error('❌ Error details:', error);
+      console.error('❌ Error message:', error.message);
+      console.error('❌ Error stack:', error.stack);
+      
+      // Calculate basic results for fallback
+      const benar = soalListRandom.filter((soal) => {
+        const userAnswer = jawabanUser[soal.id];
+        const correctAnswer = soal.jawaban;
+        if (!userAnswer || !correctAnswer) return false;
+        const cleanUserAnswer = userAnswer.trim();
+        if (!cleanUserAnswer || cleanUserAnswer === '-') return false;
+        if (soal.jenis === "pilihan_ganda") return userAnswer === correctAnswer;
+        if (Array.isArray(correctAnswer)) {
+          return correctAnswer.some(jawab => jawab?.trim().toLowerCase() === cleanUserAnswer.toLowerCase());
         }
+        return cleanUserAnswer === correctAnswer?.trim();
+      }).length;
+      
+      // Prepare hasil data (fallback)
+      const hasilData = {
+        materi: materiSlug || materi?.materi || 'Quiz',
+        kategori: materi?.kategori || 'Kategori',
+        soalList: soalListRandom,
+        jawabanUser,
+        skor: Math.round((benar / soalListRandom.length) * 100),
+        benar: benar,
+        total: soalListRandom.length,
+        isOffline: true
+      };
+
+      console.log('⚠️ Using fallback data:', hasilData);
+
+      // Save to localStorage even if backend submission fails
+      try {
+        localStorage.setItem('hasilQuiz', JSON.stringify(hasilData));
+        console.log('✅ Hasil quiz saved to localStorage (fallback mode)');
+      } catch (storageError) {
+        console.error('❌ Critical: Failed to save to localStorage:', storageError);
+        alert('Error kritis: Tidak dapat menyimpan hasil. Data mungkin hilang.');
+      }
+
+      // Still navigate even if submission fails
+      console.log('🚀 Navigating to /hasil-akhir (fallback mode)...');
+      
+      // CRITICAL: Pass isPeserta flag for FlexibleRoute access
+      const isPeserta = location.state?.isPeserta === true;
+      const navigationState = {
+        hasil: hasilData,
+        isPeserta: isPeserta,
+        nama: location.state?.nama
+      };
+      
+      console.log('🚀 Navigation state (fallback):', navigationState);
+      
+      navigate("/hasil-akhir", {
+        state: navigationState,
+        replace: false
       });
     }
   };
@@ -618,6 +876,9 @@ export default function Soal() {
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-bold text-gray-700">
                 Soal {currentIndex + 1} dari {soalListRandom.length}
+                <span className="ml-2 text-xs text-green-600 font-semibold">
+                  ({Object.keys(jawabanUser).length} dijawab)
+                </span>
               </span>
               <div className="flex items-center gap-3">
                 <span className="text-sm font-semibold text-orange-600">
@@ -656,12 +917,23 @@ export default function Soal() {
             {/* Question Header */}
             <div className="mb-6 pb-4 border-b-2 border-gray-100">
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-orange-500 to-yellow-500 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg flex-shrink-0">
-                  {currentIndex + 1}
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-lg flex-shrink-0 transition-all ${
+                  jawabanUser[soalAktif.id] 
+                    ? 'bg-gradient-to-br from-green-500 to-emerald-600' 
+                    : 'bg-gradient-to-br from-orange-500 to-yellow-500'
+                }`}>
+                  {jawabanUser[soalAktif.id] ? '✓' : currentIndex + 1}
                 </div>
-                <p className="text-lg font-bold text-gray-800 leading-relaxed flex-1">
-                  {soalAktif.soal}
-                </p>
+                <div className="flex-1">
+                  <p className="text-lg font-bold text-gray-800 leading-relaxed">
+                    {soalAktif.soal}
+                  </p>
+                  {jawabanUser[soalAktif.id] && (
+                    <span className="inline-block mt-2 text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded-full">
+                      ✓ Sudah dijawab
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
             

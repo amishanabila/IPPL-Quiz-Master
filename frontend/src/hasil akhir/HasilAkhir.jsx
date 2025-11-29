@@ -7,17 +7,72 @@ export default function HasilAkhir() {
   const [hasil, setHasil] = useState(null);
 
   useEffect(() => {
+    console.log('🎯 ========== HASIL AKHIR COMPONENT MOUNTED ==========');
+    console.log('📍 Location state:', location.state);
+    console.log('📍 Has hasil in state:', !!location.state?.hasil);
+    
     // Ambil dari state route jika ada
     if (location.state && location.state.hasil) {
+      console.log('✅ Loading hasil from location.state');
+      console.log('📊 Hasil data:', {
+        materi: location.state.hasil.materi,
+        kategori: location.state.hasil.kategori,
+        soalCount: location.state.hasil.soalList?.length,
+        jawabanCount: Object.keys(location.state.hasil.jawabanUser || {}).length,
+        skor: location.state.hasil.skor
+      });
       setHasil(location.state.hasil);
+      console.log('✅ Hasil loaded successfully from location.state');
     } else {
-      // Ambil dari localStorage
-      const data = JSON.parse(localStorage.getItem("hasilQuiz"));
-      if (data) setHasil(data);
+      console.log('⚠️ No hasil in location.state, checking localStorage...');
+      // Ambil dari localStorage sebagai fallback
+      const data = localStorage.getItem("hasilQuiz");
+      console.log('💾 localStorage data exists:', !!data);
+      
+      if (data) {
+        try {
+          const parsedData = JSON.parse(data);
+          console.log('✅ Loaded hasil from localStorage (fallback)');
+          console.log('📊 Parsed data:', {
+            materi: parsedData.materi,
+            kategori: parsedData.kategori,
+            soalCount: parsedData.soalList?.length,
+            jawabanCount: Object.keys(parsedData.jawabanUser || {}).length,
+            skor: parsedData.skor
+          });
+          setHasil(parsedData);
+        } catch (error) {
+          console.error('❌ Error parsing localStorage data:', error);
+          console.error('❌ Raw data:', data.substring(0, 100) + '...');
+        }
+      } else {
+        console.error('❌ No hasil data found in location.state or localStorage');
+      }
     }
+    console.log('🎯 ========================================');
   }, [location.state]);
 
+  // Cleanup function to remove hasil from localStorage when leaving this page
+  useEffect(() => {
+    return () => {
+      // Only clean up when navigating away from results page
+      if (hasil) {
+        localStorage.removeItem('hasilQuiz');
+        console.log('🧹 Cleaned up localStorage on unmount');
+      }
+    };
+  }, [hasil]);
+
   if (!hasil) {
+    console.error('❌ ========== NO HASIL DATA - SHOWING ERROR PAGE ==========');
+    console.error('❌ location.state:', location.state);
+    console.error('❌ localStorage hasilQuiz:', localStorage.getItem('hasilQuiz')?.substring(0, 100));
+    console.error('❌ Possible reasons:');
+    console.error('   1. Data not passed from Soal.jsx');
+    console.error('   2. localStorage failed to save');
+    console.error('   3. Direct navigation without completing quiz');
+    console.error('❌ =====================================================');
+    
     return (
       <div className="min-h-screen bg-gradient-to-br from-yellow-300 via-yellow-200 to-orange-200 flex items-center justify-center p-6 relative overflow-hidden">
         {/* Animated Background Circles */}
@@ -31,9 +86,14 @@ export default function HasilAkhir() {
             <span className="text-5xl">❌</span>
           </div>
           <h1 className="text-2xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-red-600 mb-2">Tidak Ada Hasil</h1>
-          <p className="text-center text-gray-600 mb-6 font-medium">Tidak ada hasil quiz ditemukan.</p>
+          <p className="text-center text-gray-600 mb-6 font-medium">Tidak ada hasil quiz ditemukan. Silakan kerjakan quiz terlebih dahulu.</p>
+          <p className="text-center text-gray-500 mb-4 text-sm">Periksa console browser (F12) untuk detail error.</p>
           <button
-            onClick={() => navigate("/")}
+            onClick={() => {
+              localStorage.removeItem('hasilQuiz');
+              console.log('🧹 Cleaned up localStorage before navigate');
+              navigate("/");
+            }}
             className="w-full px-6 py-3 bg-gradient-to-r from-orange-400 to-yellow-500 hover:from-orange-500 hover:to-yellow-600 text-white rounded-xl font-bold shadow-lg transition-all transform hover:scale-105"
           >
             Kembali ke Beranda
@@ -43,7 +103,15 @@ export default function HasilAkhir() {
     );
   }
 
-  const { soalList, jawabanUser, materi, kategori } = hasil;
+  const { soalList, jawabanUser, materi, kategori, skor: skorFromData, benar: benarFromData, total: totalFromData } = hasil;
+
+  console.log('📊 ========== CALCULATING HASIL AKHIR ==========');
+  console.log('📊 Materi:', materi);
+  console.log('📊 Kategori:', kategori);
+  console.log('📊 Soal count:', soalList?.length);
+  console.log('📊 Jawaban count:', Object.keys(jawabanUser || {}).length);
+  console.log('📊 Pre-calculated skor:', skorFromData);
+  console.log('📊 Pre-calculated benar:', benarFromData);
 
   // Hitung skor → PG dan isian/essay jika jawaban cocok kunci
   const benar = soalList.filter((soal) => {
@@ -79,6 +147,10 @@ export default function HasilAkhir() {
 
   const total = soalList.length;
   const persentase = Math.round((benar / total) * 100);
+
+  console.log('✅ Calculated benar:', benar, 'dari', total);
+  console.log('📊 Persentase:', persentase + '%');
+  console.log('📊 ==========================================');
 
   // Tentukan grade dan pesan
   let grade = "";
@@ -310,7 +382,11 @@ export default function HasilAkhir() {
         {/* Action Buttons */}
         <div className="flex justify-center">
           <button
-            onClick={() => navigate("/")}
+            onClick={() => {
+              localStorage.removeItem('hasilQuiz');
+              console.log('🧹 Cleaned up localStorage before navigate');
+              navigate("/");
+            }}
             className="px-8 py-4 bg-gradient-to-r from-orange-400 to-yellow-500 hover:from-orange-500 hover:to-yellow-600 text-white rounded-2xl font-bold shadow-lg transition-all transform hover:scale-105 text-lg"
           >
             🏠 Kembali ke Beranda

@@ -561,6 +561,112 @@ DELIMITER ;
 -- CALL sp_kreator_get_results_by_kumpulan(1, 1);
 
 -- ============================================================================
+-- DATA MAINTENANCE - FIX MISSING CREATED_BY
+-- ============================================================================
+-- Section ini untuk memperbaiki data existing yang created_by = NULL
+-- Terintegrasi dengan admin dashboard "Fix Data Kreator"
+-- ============================================================================
+
+DELIMITER //
+
+-- Procedure: Fix Missing Creator for Existing Data
+-- Dipanggil dari: Admin Dashboard -> Fix Data Kreator
+DROP PROCEDURE IF EXISTS sp_fix_materi_kategori_creator //
+CREATE PROCEDURE sp_fix_materi_kategori_creator()
+BEGIN
+    DECLARE first_kreator_id INT;
+    DECLARE rows_materi INT DEFAULT 0;
+    DECLARE rows_kategori INT DEFAULT 0;
+    
+    -- Get first kreator (oldest by created_at)
+    SELECT id INTO first_kreator_id 
+    FROM users 
+    WHERE role = 'kreator' 
+    ORDER BY created_at ASC 
+    LIMIT 1;
+    
+    IF first_kreator_id IS NOT NULL THEN
+        -- Fix materi
+        UPDATE materi 
+        SET created_by = first_kreator_id
+        WHERE created_by IS NULL;
+        SET rows_materi = ROW_COUNT();
+        
+        -- Fix kategori
+        UPDATE kategori 
+        SET created_by = first_kreator_id
+        WHERE created_by IS NULL;
+        SET rows_kategori = ROW_COUNT();
+        
+        -- Return results
+        SELECT 
+            rows_materi as materi_updated,
+            rows_kategori as kategori_updated,
+            (rows_materi + rows_kategori) as total_updated,
+            first_kreator_id as assigned_to_kreator_id,
+            (SELECT nama FROM users WHERE id = first_kreator_id) as kreator_nama;
+    ELSE
+        SELECT 
+            0 as materi_updated,
+            0 as kategori_updated,
+            0 as total_updated,
+            'No kreator found in system' as message;
+    END IF;
+END //
+
+-- Procedure: Check Orphaned Kreator Data
+-- Dipanggil dari: Admin Dashboard -> Cek Data Tanpa Kreator
+DROP PROCEDURE IF EXISTS sp_check_orphaned_kreator_data //
+CREATE PROCEDURE sp_check_orphaned_kreator_data()
+BEGIN
+    -- Materi without valid creator
+    SELECT 
+        'materi' as table_name,
+        m.materi_id as record_id,
+        m.judul as record_title,
+        m.created_by as creator_id,
+        m.created_at
+    FROM materi m
+    LEFT JOIN users u ON m.created_by = u.id
+    WHERE m.created_by IS NULL 
+       OR u.id IS NULL
+    
+    UNION ALL
+    
+    -- Kategori without valid creator
+    SELECT 
+        'kategori' as table_name,
+        k.id as record_id,
+        k.nama_kategori as record_title,
+        k.created_by as creator_id,
+        k.created_at
+    FROM kategori k
+    LEFT JOIN users u ON k.created_by = u.id
+    WHERE k.created_by IS NULL 
+       OR u.id IS NULL
+    
+    ORDER BY created_at DESC;
+END //
+
+DELIMITER ;
+
+-- ============================================================================
+-- VERIFICATION QUERIES (Optional - untuk testing manual)
+-- ============================================================================
+
+-- Check materi without creator
+-- SELECT materi_id, judul, created_by FROM materi WHERE created_by IS NULL;
+
+-- Check kategori without creator
+-- SELECT id, nama_kategori, created_by FROM kategori WHERE created_by IS NULL;
+
+-- Run fix procedure
+-- CALL sp_fix_materi_kategori_creator();
+
+-- Verify after fix
+-- CALL sp_check_orphaned_kreator_data();
+
+-- ============================================================================
 -- KREATOR DATABASE COMPLETE
 -- ✅ Stored procedures untuk CRUD kategori dan materi
 -- ✅ Stored procedures untuk CRUD kumpulan soal dan soal
@@ -568,4 +674,5 @@ DELIMITER ;
 -- ✅ Stored procedures untuk melihat hasil quiz peserta
 -- ✅ Stored procedures untuk pengaturan akun kreator
 -- ✅ Views untuk kemudahan akses data kreator
+-- ✅ Data maintenance untuk fix missing creator (2025-11-29)
 -- ============================================================================

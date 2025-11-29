@@ -25,4 +25,8 @@ router.get('/users', adminController.getAllUsers);
 router.put('/users/role', adminController.updateUserRole);
 router.delete('/users/:userId', adminController.deleteUser);
 
+// Data maintenance endpoints
+router.post('/fix-missing-creators', adminController.fixMissingCreators);
+router.get('/orphaned-data', adminController.getOrphanedData);
+
 module.exports = router;
