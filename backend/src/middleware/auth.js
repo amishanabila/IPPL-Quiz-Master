@@ -18,13 +18,19 @@ const authenticateToken = (req, res, next) => {
         // Verify token
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         
-        // Add user data to request
-        req.user = decoded;
-        
-        console.log('✅ AUTH - Token verified, user:', {
-            id: decoded.id,
+        // Add user data to request - normalize id field
+        req.user = {
+            id: decoded.userId || decoded.id, // Support both userId and id
+            userId: decoded.userId || decoded.id,
             email: decoded.email,
             role: decoded.role
+        };
+        
+        console.log('✅ AUTH - Token verified, user:', {
+            id: req.user.id,
+            userId: req.user.userId,
+            email: req.user.email,
+            role: req.user.role
         });
         
         next();

@@ -468,6 +468,49 @@ END //
 DELIMITER ;
 
 -- ============================================================================
+-- DATABASE MIGRATION - Tambah Kolom Email Peserta
+-- ============================================================================
+-- Migration untuk menambahkan kolom email_peserta ke tabel quiz_session
+-- Dijalankan otomatis saat setup atau update database
+-- ============================================================================
+
+-- Cek apakah kolom email_peserta sudah ada
+SET @col_exists = 0;
+SELECT COUNT(*) INTO @col_exists
+FROM information_schema.COLUMNS
+WHERE TABLE_SCHEMA = 'quiz_master'
+  AND TABLE_NAME = 'quiz_session'
+  AND COLUMN_NAME = 'email_peserta';
+
+-- Tambahkan kolom jika belum ada
+SET @query = IF(@col_exists = 0,
+    'ALTER TABLE quiz_session ADD COLUMN email_peserta VARCHAR(255) COMMENT ''Email peserta untuk tracking'' AFTER nama_peserta',
+    'SELECT ''Column email_peserta already exists'' AS message');
+
+PREPARE stmt FROM @query;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- Tambahkan index jika kolom baru ditambahkan
+SET @idx_exists = 0;
+SELECT COUNT(*) INTO @idx_exists
+FROM information_schema.STATISTICS
+WHERE TABLE_SCHEMA = 'quiz_master'
+  AND TABLE_NAME = 'quiz_session'
+  AND INDEX_NAME = 'idx_email';
+
+SET @query = IF(@idx_exists = 0 AND @col_exists = 0,
+    'ALTER TABLE quiz_session ADD INDEX idx_email (email_peserta)',
+    'SELECT ''Index idx_email already exists or not needed'' AS message');
+
+PREPARE stmt FROM @query;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+-- Verifikasi perubahan
+SELECT 'Migration completed: email_peserta column ready!' AS status;
+
+-- ============================================================================
 -- VERIFICATION QUERIES (Optional - untuk testing manual)
 -- ============================================================================
 
@@ -476,6 +519,9 @@ DELIMITER ;
 
 -- Test all users including peserta
 -- CALL sp_admin_get_all_users_with_peserta();
+
+-- Verify quiz_session structure
+-- DESCRIBE quiz_session;
 
 -- ============================================================================
 -- PESERTA DATABASE COMPLETE
@@ -486,4 +532,5 @@ DELIMITER ;
 -- ✅ Lihat hasil akhir dan ranking
 -- ✅ Lihat leaderboard (all/by kategori)
 -- ✅ Admin views untuk peserta statistics (2025-11-29)
+-- ✅ Migration: email_peserta column (2025-12-03)
 -- ============================================================================

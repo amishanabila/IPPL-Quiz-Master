@@ -5,6 +5,7 @@ import Header from "./header/Header";
 import KumpulanMateri from "./materi/KumpulanMateri";
 import BannerBuatSoal from "./Buat Soal/BannerBuatSoal";
 import BannerLeaderboard from "./leaderboard/BannerLeaderboard";
+import EksporDataKreator from "./components/EksporDataKreator";
 import Footer from "./footer/Footer";
 
 export default function HalamanAwal() {
@@ -78,6 +79,9 @@ export default function HalamanAwal() {
             <BannerBuatSoal/>
             <BannerLeaderboard/>
           </div>
+          
+          {/* Export Data Section */}
+          <EksporDataKreator />
         </div>
         
         <div className="flex-1">

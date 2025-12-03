@@ -24,4 +24,10 @@ router.get('/materi/:materiId', soalController.getSoalByMateri);
 // Get soal by kumpulan_soal_id (for quiz with PIN)
 router.get('/kumpulan-soal/:kumpulanSoalId', soalController.getSoalByKumpulanSoal);
 
+// Export data for Kreator (protected)
+router.get('/export/my-data', auth, soalController.exportKreatorData);
+
+// Export specific quiz detail (protected)
+router.get('/export/quiz/:kumpulanSoalId', auth, soalController.exportQuizDetail);
+
 module.exports = router;

@@ -128,6 +128,7 @@ CREATE TABLE IF NOT EXISTS quiz (
 CREATE TABLE IF NOT EXISTS quiz_session (
     session_id INT AUTO_INCREMENT PRIMARY KEY,
     nama_peserta VARCHAR(255) NOT NULL,
+    email_peserta VARCHAR(255) COMMENT 'Email peserta untuk tracking',
     kumpulan_soal_id INT NOT NULL,
     pin_code CHAR(6),
     waktu_mulai DATETIME NOT NULL COMMENT 'Server timestamp saat quiz dimulai',
@@ -140,7 +141,8 @@ CREATE TABLE IF NOT EXISTS quiz_session (
     FOREIGN KEY (kumpulan_soal_id) REFERENCES kumpulan_soal(kumpulan_soal_id) ON DELETE CASCADE,
     UNIQUE KEY unique_session (nama_peserta, kumpulan_soal_id, pin_code),
     INDEX idx_active (is_active),
-    INDEX idx_peserta (nama_peserta, kumpulan_soal_id)
+    INDEX idx_peserta (nama_peserta, kumpulan_soal_id),
+    INDEX idx_email (email_peserta)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Tabel Hasil Quiz (untuk leaderboard dan tracking hasil peserta)

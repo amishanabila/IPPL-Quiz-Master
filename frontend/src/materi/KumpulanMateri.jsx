@@ -231,15 +231,7 @@ export default function KumpulanMateri() {
             {soalTerbaru.map((m, idx) => (
               <div
                 key={idx}
-                className="bg-gradient-to-br from-blue-50 to-white border-2 border-blue-200 rounded-xl shadow-md p-4 flex flex-col justify-between cursor-pointer transform transition-transform duration-200 hover:-translate-y-1 hover:shadow-xl relative"
-                onClick={() => navigate(`/soal/${toSlug(m.materi)}`, { 
-                  state: { 
-                    materi_id: m.materi_id,
-                    kumpulan_soal_id: m.kumpulan_soal_id,
-                    materi: m.materi,
-                    kategori: m.kategori
-                  } 
-                })}
+                className="bg-gradient-to-br from-blue-50 to-white border-2 border-blue-200 rounded-xl shadow-md p-4 flex flex-col justify-between transform transition-transform duration-200 hover:-translate-y-1 hover:shadow-xl relative"
               >
                 <span className="absolute top-2 right-2 bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded-full">
                   Baru
@@ -319,15 +311,7 @@ export default function KumpulanMateri() {
             return (
               <div
                 key={idx}
-                className="bg-white rounded-xl shadow-md p-4 flex flex-col justify-between cursor-pointer transform transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg relative"
-                onClick={() => navigate(`/soal/${toSlug(m.materi)}`, { 
-                  state: { 
-                    materi_id: m.materi_id,
-                    kumpulan_soal_id: m.kumpulan_soal_id,
-                    materi: m.materi,
-                    kategori: m.kategori
-                  } 
-                })}
+                className="bg-white rounded-xl shadow-md p-4 flex flex-col justify-between transform transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg relative"
               >
                 {isUserCreated && (
                   <>

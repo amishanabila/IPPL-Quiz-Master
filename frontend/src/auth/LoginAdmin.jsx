@@ -65,13 +65,15 @@ export default function LoginAdmin() {
       const response = await authService.login({ email, password });
       
       console.log("📥 Response dari login admin:", response);
+      console.log("🔍 User role:", response.data?.user?.role);
+      console.log("🔍 Full user data:", response.data?.user);
       
       if (response.status === 'success' || response.success) {
         const userRole = response.data?.user?.role;
         
         // Validasi harus admin
         if (userRole !== 'admin') {
-          console.error("❌ Bukan admin, akses ditolak");
+          console.error("❌ Bukan admin, akses ditolak. Role:", userRole);
           setErrors({
             email: "Akses ditolak. Halaman ini hanya untuk admin.",
             password: "Akses ditolak. Halaman ini hanya untuk admin.",

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { authService } from "../services/authService";
 import EditProfilPopup from "../popup/EditProfilPopup";
+import HapusAkunPopup from "../popup/HapusAkunPopup";
+import HapusAkunBerhasilPopup from "../popup/HapusAkunBerhasilPopup";
 import Footer from "../footer/Footer";
 
 export default function Profil() {
@@ -9,8 +11,11 @@ export default function Profil() {
   const [user, setUser] = useState({});
   const [profilePhoto, setProfilePhoto] = useState("user.png");
   const [showEditPopup, setShowEditPopup] = useState(false);
+  const [showDeletePopup, setShowDeletePopup] = useState(false);
+  const [showDeleteSuccessPopup, setShowDeleteSuccessPopup] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Load user profile from database
   useEffect(() => {
@@ -80,6 +85,32 @@ export default function Profil() {
       setProfilePhoto(updatedData.foto);
     }
     setShowEditPopup(false);
+  };
+
+  const handleDeleteAccount = async () => {
+    try {
+      setDeleting(true);
+      const response = await authService.deleteAccount();
+      
+      if (response.status === 'success' || response.success) {
+        setShowDeletePopup(false);
+        setShowDeleteSuccessPopup(true);
+      } else {
+        alert(response.message || 'Gagal menghapus akun. Silakan coba lagi.');
+        setShowDeletePopup(false);
+      }
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      alert('Terjadi kesalahan saat menghapus akun. Silakan coba lagi.');
+      setShowDeletePopup(false);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteSuccess = () => {
+    setShowDeleteSuccessPopup(false);
+    navigate('/register');
   };
 
   if (loading) {
@@ -175,9 +206,18 @@ export default function Profil() {
         {/* Tombol Edit Profil */}
         <button
           onClick={() => setShowEditPopup(true)}
-          className="w-full px-6 py-3 bg-gradient-to-r from-orange-400 to-red-500 hover:from-orange-500 hover:to-red-600 text-white font-bold rounded-xl shadow-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+          className="w-full px-6 py-3 bg-gradient-to-r from-orange-400 to-red-500 hover:from-orange-500 hover:to-red-600 text-white font-bold rounded-xl shadow-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] mb-3"
         >
           ✏️ Edit Profil
+        </button>
+
+        {/* Tombol Hapus Akun */}
+        <button
+          onClick={() => setShowDeletePopup(true)}
+          disabled={deleting}
+          className="w-full px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-bold rounded-xl shadow-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {deleting ? '⏳ Menghapus...' : '🗑️ Hapus Akun'}
         </button>
       </div>
 
@@ -188,6 +228,21 @@ export default function Profil() {
           profilePhoto={profilePhoto}
           onClose={() => setShowEditPopup(false)}
           onSave={handleSaveProfile}
+        />
+      )}
+
+      {/* Popup Konfirmasi Hapus Akun */}
+      {showDeletePopup && (
+        <HapusAkunPopup
+          onConfirm={handleDeleteAccount}
+          onCancel={() => setShowDeletePopup(false)}
+        />
+      )}
+
+      {/* Popup Berhasil Hapus Akun */}
+      {showDeleteSuccessPopup && (
+        <HapusAkunBerhasilPopup
+          onClose={handleDeleteSuccess}
         />
       )}
 

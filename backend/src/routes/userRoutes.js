@@ -21,5 +21,6 @@ const upload = multer({
 // Protected user routes (require auth middleware)
 router.get('/me', auth, UserController.getProfile);
 router.put('/me', auth, upload.single('photo'), UserController.updateProfile);
+router.delete('/delete-account', auth, UserController.deleteAccount);
 
 module.exports = router;

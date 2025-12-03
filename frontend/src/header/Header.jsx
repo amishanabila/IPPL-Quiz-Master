@@ -197,7 +197,7 @@ export default function Header() {
       )}
       
       {showLogoutSuccess && (
-        <LogoutBerhasil />
+        <LogoutBerhasil isAdmin={false} />
       )}
     </header>
   );

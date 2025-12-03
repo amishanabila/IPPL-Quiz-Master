@@ -233,6 +233,31 @@ export const authService = {
   // Get user role
   getUserRole() {
     return localStorage.getItem('userRole');
+  },
+
+  // Delete account
+  async deleteAccount() {
+    try {
+      const token = this.getToken();
+      const response = await fetch(`${BASE_URL}/user/delete-account`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      
+      if (data.status === 'success' || data.success) {
+        // Clear all auth data
+        this.logout();
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Delete account error:', error);
+      throw error;
+    }
   }
 };
 

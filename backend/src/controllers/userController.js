@@ -139,6 +139,63 @@ const UserController = {
                 message: 'Terjadi kesalahan saat memperbarui profil'
             });
         }
+    },
+
+    // Delete user account - RAW SQL QUERY
+    deleteAccount: async (req, res) => {
+        try {
+            const userId = req.user.userId;
+
+            console.log('Delete account request for user ID:', userId);
+
+            // Check if user exists
+            const [users] = await db.query(
+                'SELECT id, email, role FROM users WHERE id = ?',
+                [userId]
+            );
+
+            if (users.length === 0) {
+                return res.status(404).json({
+                    status: 'error',
+                    message: 'User tidak ditemukan'
+                });
+            }
+
+            // Prevent admin from deleting their own account via this endpoint
+            if (users[0].role === 'admin') {
+                return res.status(403).json({
+                    status: 'error',
+                    message: 'Admin tidak dapat menghapus akun sendiri'
+                });
+            }
+
+            // Delete user (CASCADE akan menghapus data terkait)
+            const [result] = await db.query(
+                'DELETE FROM users WHERE id = ?',
+                [userId]
+            );
+
+            console.log('Delete account result:', result);
+
+            if (result.affectedRows === 0) {
+                return res.status(404).json({
+                    status: 'error',
+                    message: 'Gagal menghapus akun'
+                });
+            }
+
+            res.json({
+                status: 'success',
+                message: 'Akun berhasil dihapus'
+            });
+
+        } catch (error) {
+            console.error('Delete account error:', error);
+            res.status(500).json({
+                status: 'error',
+                message: 'Terjadi kesalahan saat menghapus akun'
+            });
+        }
     }
 };
 

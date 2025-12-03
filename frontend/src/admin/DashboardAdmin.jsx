@@ -4,6 +4,7 @@ import { authService } from '../services/authService';
 import HeaderAdmin from '../header/HeaderAdmin';
 import Footer from '../footer/Footer';
 import { Users, FileText, BarChart3, Download, Database, AlertCircle, TrendingUp, Clock } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
@@ -136,18 +137,69 @@ function DashboardAdmin() {
       if (response.ok) {
         const data = await response.json();
         
-        // Convert to CSV
-        const csvContent = convertToCSV(data.data, type);
+        // Process data untuk format yang lebih baik
+        const processedData = data.data.map(row => {
+          const newRow = { ...row };
+          
+          // Format variasi_jawaban untuk soal (jika ada)
+          if (type === 'soal' && newRow.variasi_jawaban) {
+            try {
+              const parsedValue = typeof newRow.variasi_jawaban === 'string' 
+                ? JSON.parse(newRow.variasi_jawaban) 
+                : newRow.variasi_jawaban;
+              
+              if (Array.isArray(parsedValue)) {
+                newRow.variasi_jawaban = parsedValue.join(', ');
+              }
+            } catch (e) {
+              // Keep original if parsing fails
+            }
+          }
+          
+          // Format timestamps
+          ['created_at', 'updated_at', 'completed_at'].forEach(field => {
+            if (newRow[field]) {
+              try {
+                const date = new Date(newRow[field]);
+                if (!isNaN(date.getTime())) {
+                  const day = String(date.getDate()).padStart(2, '0');
+                  const month = String(date.getMonth() + 1).padStart(2, '0');
+                  const year = date.getFullYear();
+                  const hours = String(date.getHours()).padStart(2, '0');
+                  const minutes = String(date.getMinutes()).padStart(2, '0');
+                  newRow[field] = `${day}/${month}/${year} ${hours}:${minutes}`;
+                }
+              } catch (e) {
+                // Keep original
+              }
+            }
+          });
+          
+          return newRow;
+        });
         
-        // Create blob with UTF-8 BOM for Excel
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
+        // Convert to Excel using XLSX
+        const worksheet = XLSX.utils.json_to_sheet(processedData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, type);
         
-        // Use .csv extension to ensure Excel recognizes it
-        const filename = `export_${type}_${new Date().toISOString().split('T')[0]}.csv`;
-        link.href = URL.createObjectURL(blob);
-        link.download = filename;
-        link.click();
+        // Auto-size columns
+        const maxWidth = 50;
+        const cols = [];
+        if (processedData.length > 0) {
+          Object.keys(processedData[0]).forEach(key => {
+            const maxLen = Math.max(
+              key.length,
+              ...processedData.map(row => String(row[key] || '').length)
+            );
+            cols.push({ wch: Math.min(maxLen + 2, maxWidth) });
+          });
+          worksheet['!cols'] = cols;
+        }
+        
+        // Generate Excel file and download
+        const filename = `export_${type}_${new Date().toISOString().split('T')[0]}.xlsx`;
+        XLSX.writeFile(workbook, filename);
         
         // Show success popup with color matching button type
         const messages = {
@@ -290,21 +342,23 @@ function DashboardAdmin() {
     const info = backupPopup.data;
     
     if (choice === 'download') {
-      // Create CSV content
-      const csvContent = `Database Backup Information\n` +
-        `Generated: ${new Date().toLocaleString('id-ID')}\n\n` +
-        `Database Name;${info.database_name}\n` +
-        `Total Users;${info.total_users}\n` +
-        `Total Soal;${info.total_soal}\n` +
-        `Total Hasil Quiz;${info.total_hasil_quiz}\n\n` +
-        `Note: Untuk full database backup, gunakan phpMyAdmin atau MySQL CLI`;
+      // Create Excel workbook
+      const backupData = [
+        { Field: 'Database Name', Value: info.database_name },
+        { Field: 'Total Users', Value: info.total_users },
+        { Field: 'Total Soal', Value: info.total_soal },
+        { Field: 'Total Hasil Quiz', Value: info.total_hasil_quiz },
+        { Field: 'Generated', Value: new Date().toLocaleString('id-ID') },
+        { Field: 'Note', Value: 'Untuk full database backup, gunakan phpMyAdmin atau MySQL CLI' }
+      ];
       
-      // Download CSV
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `backup_info_${new Date().toISOString().split('T')[0]}.csv`;
-      link.click();
+      const worksheet = XLSX.utils.json_to_sheet(backupData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Backup Info');
+      
+      // Download Excel
+      const filename = `backup_info_${new Date().toISOString().split('T')[0]}.xlsx`;
+      XLSX.writeFile(workbook, filename);
       
       setBackupPopup({ show: true, type: 'success', data: info });
     } else {
@@ -562,7 +616,7 @@ function DashboardAdmin() {
               <Download className="h-5 w-5 text-blue-600 mr-2" />
               <h2 className="text-lg font-semibold text-gray-900">Export Data</h2>
             </div>
-            <p className="text-gray-600 text-sm mb-4">Download data dalam format CSV</p>
+            <p className="text-gray-600 text-sm mb-4">Download data dalam format Excel (.xlsx)</p>
             <div className="space-y-2">
               <button
                 onClick={() => handleExportData('users')}
@@ -765,7 +819,7 @@ function DashboardAdmin() {
                     <div className="space-y-2 text-left bg-gray-50 p-4 rounded-lg">
                       <div className="flex items-center gap-2">
                         <span className="text-green-600">✅</span>
-                        <span className="text-gray-700">OK = Download Backup Info (CSV)</span>
+                        <span className="text-gray-700">OK = Download Backup Info (Excel)</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-red-600">❌</span>

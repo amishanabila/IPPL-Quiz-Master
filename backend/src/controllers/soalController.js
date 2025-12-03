@@ -11,9 +11,10 @@ const soalController = {
       // 🔥 DEBUG: Log req.user untuk debugging
       console.log('🔍 DEBUG - req.user:', req.user);
       console.log('🔍 DEBUG - req.user.id:', req.user?.id);
+      console.log('🔍 DEBUG - req.user.userId:', req.user?.userId);
       
-      const created_by = req.user.id; // From auth middleware
-      const updated_by = req.user.id;
+      const created_by = req.user.id || req.user.userId; // From auth middleware
+      const updated_by = req.user.id || req.user.userId;
       
       console.log('🔍 DEBUG - created_by value:', created_by);
       console.log('🔍 DEBUG - updated_by value:', updated_by);
@@ -60,13 +61,16 @@ const soalController = {
           let variasiJawaban = null;
           
           if (Array.isArray(soal.jawaban_benar)) {
-            // Isian singkat: filter jawaban yang valid
-            const validAnswers = soal.jawaban_benar.filter(j => j && typeof j === 'string' && j.trim() !== '');
+            // Isian singkat: filter jawaban yang valid dan normalize ke lowercase
+            const validAnswers = soal.jawaban_benar
+              .filter(j => j && typeof j === 'string' && j.trim() !== '')
+              .map(j => j.trim().toLowerCase()); // Normalize ke lowercase untuk case-insensitive
+            
             if (validAnswers.length === 0) {
               throw new Error(`Soal "${soal.pertanyaan}" memiliki jawaban yang tidak valid. Minimal 1 jawaban harus diisi.`);
             }
-            jawabanBenar = validAnswers[0]; // Jawaban utama
-            variasiJawaban = JSON.stringify(validAnswers); // Simpan semua variasi sebagai JSON
+            jawabanBenar = validAnswers[0]; // Jawaban utama (lowercase)
+            variasiJawaban = JSON.stringify(validAnswers); // Simpan semua variasi sebagai JSON (lowercase)
           } else {
             // Pilihan ganda atau essay
             jawabanBenar = soal.jawaban_benar?.trim();
@@ -199,7 +203,7 @@ const soalController = {
     try {
       const { id } = req.params;
       const { kategori_id, soal_list, waktu_per_soal, waktu_keseluruhan, tipe_waktu, materi_id } = req.body;
-      const updated_by = req.user.id; // From auth middleware
+      const updated_by = req.user.id || req.user.userId; // From auth middleware
 
       // Get judul from materi if materi_id is provided
       let judul = req.body.judul || null;
@@ -238,13 +242,16 @@ const soalController = {
           let variasiJawaban = null;
           
           if (Array.isArray(soal.jawaban_benar)) {
-            // Isian singkat: filter jawaban yang valid
-            const validAnswers = soal.jawaban_benar.filter(j => j && typeof j === 'string' && j.trim() !== '');
+            // Isian singkat: filter jawaban yang valid dan normalize ke lowercase
+            const validAnswers = soal.jawaban_benar
+              .filter(j => j && typeof j === 'string' && j.trim() !== '')
+              .map(j => j.trim().toLowerCase()); // Normalize ke lowercase untuk case-insensitive
+            
             if (validAnswers.length === 0) {
               throw new Error(`Soal "${soal.pertanyaan}" memiliki jawaban yang tidak valid. Minimal 1 jawaban harus diisi.`);
             }
-            jawabanBenar = validAnswers[0]; // Jawaban utama
-            variasiJawaban = JSON.stringify(validAnswers); // Simpan semua variasi sebagai JSON
+            jawabanBenar = validAnswers[0]; // Jawaban utama (lowercase)
+            variasiJawaban = JSON.stringify(validAnswers); // Simpan semua variasi sebagai JSON (lowercase)
           } else {
             // Pilihan ganda atau essay
             jawabanBenar = soal.jawaban_benar?.trim();
@@ -501,6 +508,200 @@ const soalController = {
       res.status(500).json({
         status: 'error',
         message: 'Terjadi kesalahan saat mengambil data soal'
+      });
+    }
+  },
+
+  // Export data for Kreator - export their own quiz data
+  async exportKreatorData(req, res) {
+    try {
+      const kreatorId = req.user.id || req.user.userId; // From auth middleware
+      console.log('📊 Exporting data for kreator:', kreatorId);
+      console.log('🔍 req.user:', req.user);
+
+      if (!kreatorId) {
+        return res.status(400).json({
+          success: false,
+          message: 'User ID tidak ditemukan. Silakan login kembali.'
+        });
+      }
+
+      // Get all kumpulan soal created by this kreator with details
+      const [kumpulanSoal] = await db.query(
+        `SELECT 
+          ks.kumpulan_soal_id,
+          ks.judul,
+          k.nama_kategori,
+          m.judul as materi_judul,
+          ks.jumlah_soal,
+          ks.pin_code,
+          ks.waktu_per_soal,
+          ks.waktu_keseluruhan,
+          ks.tipe_waktu,
+          ks.created_at,
+          ks.updated_at,
+          COUNT(DISTINCT qs.session_id) as total_peserta,
+          AVG(hr.skor) as rata_rata_score
+        FROM kumpulan_soal ks
+        LEFT JOIN kategori k ON ks.kategori_id = k.id
+        LEFT JOIN materi m ON ks.materi_id = m.materi_id
+        LEFT JOIN quiz_session qs ON ks.kumpulan_soal_id = qs.kumpulan_soal_id
+        LEFT JOIN hasil_quiz hr ON qs.session_id = hr.session_id
+        WHERE ks.created_by = ?
+        GROUP BY ks.kumpulan_soal_id
+        ORDER BY ks.created_at DESC`,
+        [kreatorId]
+      );
+
+      // Get detailed quiz results for this kreator's quizzes
+      const [hasilQuiz] = await db.query(
+        `SELECT 
+          hr.hasil_id,
+          qs.nama_peserta,
+          COALESCE(qs.email_peserta, hr.nama_peserta) as email_peserta,
+          ks.judul as judul_quiz,
+          k.nama_kategori,
+          hr.skor as score,
+          hr.jawaban_benar as jumlah_benar,
+          (hr.total_soal - hr.jawaban_benar) as jumlah_salah,
+          hr.completed_at
+        FROM hasil_quiz hr
+        JOIN quiz_session qs ON hr.session_id = qs.session_id
+        JOIN kumpulan_soal ks ON qs.kumpulan_soal_id = ks.kumpulan_soal_id
+        LEFT JOIN kategori k ON ks.kategori_id = k.id
+        WHERE ks.created_by = ?
+        ORDER BY hr.completed_at DESC`,
+        [kreatorId]
+      );
+
+      console.log('✅ Found kumpulan_soal:', kumpulanSoal.length);
+      console.log('✅ Found hasil_quiz:', hasilQuiz.length);
+      
+      if (kumpulanSoal.length > 0) {
+        console.log('📝 Sample kumpulan_soal:', kumpulanSoal[0]);
+      }
+      if (hasilQuiz.length > 0) {
+        console.log('📝 Sample hasil_quiz:', hasilQuiz[0]);
+      }
+
+      res.json({
+        success: true,
+        data: {
+          kumpulan_soal: kumpulanSoal,
+          hasil_quiz: hasilQuiz
+        }
+      });
+    } catch (error) {
+      console.error('Error exporting kreator data:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Terjadi kesalahan saat export data',
+        error: error.message
+      });
+    }
+  },
+
+  // Export specific quiz data with all soal
+  async exportQuizDetail(req, res) {
+    try {
+      const { kumpulanSoalId } = req.params;
+      const kreatorId = req.user.id || req.user.userId; // From auth middleware
+      
+      console.log('📊 Exporting quiz detail for:', kumpulanSoalId);
+      console.log('🔍 Kreator ID:', kreatorId);
+
+      if (!kreatorId) {
+        return res.status(400).json({
+          success: false,
+          message: 'User ID tidak ditemukan. Silakan login kembali.'
+        });
+      }
+
+      // Verify ownership
+      const [ownership] = await db.query(
+        'SELECT created_by FROM kumpulan_soal WHERE kumpulan_soal_id = ?',
+        [kumpulanSoalId]
+      );
+
+      if (ownership.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Kumpulan soal tidak ditemukan'
+        });
+      }
+
+      console.log('🔍 Owner ID from DB:', ownership[0].created_by);
+      
+      if (ownership[0].created_by !== kreatorId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Anda tidak memiliki akses untuk export data ini'
+        });
+      }
+
+      // Get kumpulan soal details
+      const [kumpulanSoal] = await db.query(
+        `SELECT 
+          ks.*,
+          k.nama_kategori,
+          m.judul as materi_judul,
+          u.nama as nama_kreator
+        FROM kumpulan_soal ks
+        LEFT JOIN kategori k ON ks.kategori_id = k.id
+        LEFT JOIN materi m ON ks.materi_id = m.materi_id
+        LEFT JOIN users u ON ks.created_by = u.id
+        WHERE ks.kumpulan_soal_id = ?`,
+        [kumpulanSoalId]
+      );
+
+      // Get all soal
+      const [soal] = await db.query(
+        `SELECT 
+          soal_id,
+          pertanyaan,
+          pilihan_a,
+          pilihan_b,
+          pilihan_c,
+          pilihan_d,
+          jawaban_benar,
+          variasi_jawaban
+        FROM soal 
+        WHERE kumpulan_soal_id = ?
+        ORDER BY soal_id`,
+        [kumpulanSoalId]
+      );
+
+      // Get hasil quiz for this kumpulan
+      const [hasilQuiz] = await db.query(
+        `SELECT 
+          hr.hasil_id,
+          qs.nama_peserta,
+          COALESCE(qs.email_peserta, hr.nama_peserta) as email_peserta,
+          hr.skor as score,
+          hr.jawaban_benar as jumlah_benar,
+          (hr.total_soal - hr.jawaban_benar) as jumlah_salah,
+          hr.completed_at
+        FROM hasil_quiz hr
+        JOIN quiz_session qs ON hr.session_id = qs.session_id
+        WHERE qs.kumpulan_soal_id = ?
+        ORDER BY hr.completed_at DESC`,
+        [kumpulanSoalId]
+      );
+
+      res.json({
+        success: true,
+        data: {
+          info: kumpulanSoal[0],
+          soal: soal,
+          hasil_quiz: hasilQuiz
+        }
+      });
+    } catch (error) {
+      console.error('Error exporting quiz detail:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Terjadi kesalahan saat export detail quiz',
+        error: error.message
       });
     }
   }

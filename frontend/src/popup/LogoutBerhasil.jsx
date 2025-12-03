@@ -2,11 +2,17 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 
-const LogoutBerhasil = () => {
+const LogoutBerhasil = ({ isAdmin = false }) => {
   const navigate = useNavigate();
 
   const handleBackToDashboard = () => {
-    navigate('/', { replace: true });
+    // Redirect ke halaman login admin jika user adalah admin
+    if (isAdmin) {
+      navigate('/admin', { replace: true });
+    } else {
+      // Redirect ke dashboard utama untuk user biasa (kreator/peserta)
+      navigate('/', { replace: true });
+    }
   };
 
   const modalContent = (
@@ -87,7 +93,7 @@ const LogoutBerhasil = () => {
             className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-xl text-base hover:from-blue-600 hover:to-blue-700 font-bold shadow-lg transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
             onClick={handleBackToDashboard}
           >
-            🏠 Kembali ke Dashboard Utama
+            {isAdmin ? '🔐 Kembali ke Login Admin' : '🏠 Kembali ke Dashboard Utama'}
           </button>
         </div>
       </div>
