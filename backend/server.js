@@ -17,20 +17,15 @@ const adminRoutes = require('./src/routes/adminRoutes');
 
 const app = express();
 
-// CORS Configuration
-const corsOptions = {
-    origin: [
-        'https://ippl-quiz-master.vercel.app',
-        'http://localhost:5173',
-        'http://localhost:3000'
-    ],
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-};
+// CORS Configuration - Allow all origins for now
+app.use(cors({
+    origin: '*',
+    credentials: false,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
+}));
 
 // Middlewares
-app.use(cors(corsOptions));
 // Increase payload limit to 50MB for base64 images
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
