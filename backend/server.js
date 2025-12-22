@@ -26,14 +26,17 @@ app.get('/health', async (req, res) => {
             status: 'ok',
             database: 'connected',
             timestamp: new Date().toISOString(),
-            environment: process.env.NODE_ENV || 'development'
+            environment: process.env.NODE_ENV || 'development',
+            uptime: process.uptime()
         });
     } catch (error) {
+        console.error('[Health Check] Database error:', error.message);
         res.status(503).json({
             status: 'error',
             database: 'disconnected',
-            message: error.message,
-            timestamp: new Date().toISOString()
+            message: error.message.substring(0, 100),
+            timestamp: new Date().toISOString(),
+            environment: process.env.NODE_ENV || 'development'
         });
     }
 });

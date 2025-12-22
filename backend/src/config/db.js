@@ -3,15 +3,23 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
+console.log('[DB Config] Initializing database connection...');
+console.log('[DB Config] Host:', process.env.DB_HOST);
+console.log('[DB Config] Port:', process.env.DB_PORT || 3306);
+console.log('[DB Config] Database:', process.env.DB_NAME);
+
 const pool = mysql.createPool({
-    host: process.env.DB_HOST,
+    host: process.env.DB_HOST || 'localhost',
     port: process.env.DB_PORT || 3306,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'quiz_master',
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0
+    queueLimit: 0,
+    enableKeepAlive: true,
+    keepAliveInitialDelayMs: 0,
+    charset: 'utf8mb4'
 });
 
 // Convert pool to use promises
@@ -19,16 +27,24 @@ const promisePool = pool.promise();
 
 // Handle pool errors
 pool.on('error', (err) => {
-    console.error('Database connection error:', err);
+    console.error('[DB Error] Database pool error:', err.code);
     if (err.code === 'PROTOCOL_CONNECTION_LOST') {
-        console.error('Database connection was closed.');
+        console.error('[DB Error] Database connection was closed.');
     }
     if (err.code === 'PROTOCOL_ENQUEUE_AFTER_FATAL_ERROR') {
-        console.error('Database had a fatal error.');
+        console.error('[DB Error] Database had a fatal error.');
     }
     if (err.code === 'PROTOCOL_ENQUEUE_AFTER_QUIT') {
-        console.error('Database connection was manually terminated.');
+        console.error('[DB Error] Database connection was manually terminated.');
+    }
+    if (err.code === 'PROTOCOL_PACKETS_OUT_OF_ORDER') {
+        console.error('[DB Error] Database packets out of order.');
+    }
+    if (err.code === 'ECONNREFUSED') {
+        console.error('[DB Error] Database connection refused. Check DB_HOST, DB_PORT and credentials.');
     }
 });
+
+console.log('[DB Config] Database pool initialized successfully!');
 
 module.exports = promisePool;
