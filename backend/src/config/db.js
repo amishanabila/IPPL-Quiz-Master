@@ -1,9 +1,18 @@
 const mysql = require('mysql2');
+const fs = require('fs');
+const path = require('path');
 const dotenv = require('dotenv');
 
-// Load .env ONLY in development
-if (process.env.NODE_ENV !== 'production') {
-    dotenv.config();
+// Load .env.local first (highest priority), then .env
+const envLocalPath = path.join(__dirname, '../../.env.local');
+const envPath = path.join(__dirname, '../../.env');
+
+if (fs.existsSync(envLocalPath)) {
+    dotenv.config({ path: envLocalPath });
+    console.log('[DB Config] Loaded .env.local');
+} else if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    console.log('[DB Config] Loaded .env');
 }
 
 console.log('[DB Config] Initializing database connection...');

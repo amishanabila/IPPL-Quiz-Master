@@ -1,14 +1,20 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 const dotenv = require('dotenv');
 const db = require('./src/config/db');
 
-// Load .env ONLY in development
-if (process.env.NODE_ENV !== 'production') {
-    dotenv.config();
-    console.log('[Server] Loading .env file (development mode)');
-} else {
-    console.log('[Server] Using environment variables from Railway (production mode)');
+// Load .env.local first (development), then .env (production)
+const envLocalPath = path.join(__dirname, '.env.local');
+const envPath = path.join(__dirname, '.env');
+
+if (fs.existsSync(envLocalPath)) {
+    dotenv.config({ path: envLocalPath });
+    console.log('[Server] Loaded .env.local (development)');
+} else if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    console.log('[Server] Loaded .env (production)');
 }
 
 // Import route handlers
