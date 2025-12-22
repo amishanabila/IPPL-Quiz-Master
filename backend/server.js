@@ -3,8 +3,13 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const db = require('./src/config/db');
 
-// Load environment variables
-dotenv.config();
+// Load .env ONLY in development
+if (process.env.NODE_ENV !== 'production') {
+    dotenv.config();
+    console.log('[Server] Loading .env file (development mode)');
+} else {
+    console.log('[Server] Using environment variables from Railway (production mode)');
+}
 
 // Import route handlers
 const authRoutes = require('./src/routes/authRoutes');

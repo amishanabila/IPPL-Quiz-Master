@@ -1,9 +1,13 @@
 const mysql = require('mysql2');
 const dotenv = require('dotenv');
 
-dotenv.config();
+// Load .env ONLY in development
+if (process.env.NODE_ENV !== 'production') {
+    dotenv.config();
+}
 
 console.log('[DB Config] Initializing database connection...');
+console.log('[DB Config] Environment:', process.env.NODE_ENV || 'development');
 console.log('[DB Config] Host:', process.env.DB_HOST);
 console.log('[DB Config] Port:', process.env.DB_PORT || 3306);
 console.log('[DB Config] Database:', process.env.DB_NAME);
