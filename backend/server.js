@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const db = require('./src/config/db');
 
 // Load environment variables
 dotenv.config();
@@ -17,7 +18,27 @@ const adminRoutes = require('./src/routes/adminRoutes');
 
 const app = express();
 
-// CORS Configuration - Allow all origins for now
+// Health check endpoint (first thing before CORS)
+app.get('/health', async (req, res) => {
+    try {
+        const [result] = await db.query('SELECT 1');
+        res.json({
+            status: 'ok',
+            database: 'connected',
+            timestamp: new Date().toISOString(),
+            environment: process.env.NODE_ENV || 'development'
+        });
+    } catch (error) {
+        res.status(503).json({
+            status: 'error',
+            database: 'disconnected',
+            message: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+});
+
+// CORS Configuration
 app.use(cors({
     origin: '*',
     credentials: false,
