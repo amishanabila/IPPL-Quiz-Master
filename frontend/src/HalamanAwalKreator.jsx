@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { authService } from "./services/authService";
 import Header from "./header/Header";
 import KumpulanMateri from "./materi/KumpulanMateri";
-import BannerBuatSoal from "./Buat Soal/BannerBuatSoal";
+import BannerBuatSoal from "./buatsoal/BannerBuatSoal";
 import BannerLeaderboard from "./leaderboard/BannerLeaderboard";
 import EksporDataKreator from "./components/EksporDataKreator";
 import Footer from "./footer/Footer";
