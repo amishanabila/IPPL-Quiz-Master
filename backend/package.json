@@ -7,7 +7,9 @@
     "start": "node setup-db.js && node server.js",
     "dev": "nodemon server.js",
     "setup-db": "node setup-db.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "echo 'Backend build complete'",
+    "vercel-build": "echo 'Build for Vercel complete'"
   },
   "keywords": [],
   "author": "",
