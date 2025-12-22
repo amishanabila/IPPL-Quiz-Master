@@ -1,14 +1,17 @@
 const mysql = require('mysql2/promise');
 const fs = require('fs');
 const path = require('path');
+const dotenv = require('dotenv');
+
+dotenv.config();
 
 async function importDatabase() {
     const connection = await mysql.createConnection({
-        host: 'shuttle.proxy.rlwy.net',
-        port: 43358,
-        user: 'root',
-        password: 'wKdNtcTjTLGpGzQyIAmhxyEsAyLlSBGC',
-        database: 'railway',
+        host: process.env.DB_HOST,
+        port: process.env.DB_PORT || 3306,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+        database: process.env.DB_NAME,
         multipleStatements: true
     });
 
