@@ -106,15 +106,24 @@ const authController = {
       }
 
       const user = users[0];
+      console.log('User found:', { id: user.id, email: user.email, role: user.role });
+      console.log('Password hash length:', user.password?.length);
+      console.log('Input password length:', password.length);
 
       // Check password
+      console.log('Comparing passwords...');
       const validPassword = await bcryptjs.compare(password, user.password);
+      console.log('Password comparison result:', validPassword);
+      
       if (!validPassword) {
+        console.log('❌ Password mismatch - login rejected');
         return res.status(401).json({
           status: 'error',
           message: 'Email atau password salah'
         });
       }
+      
+      console.log('✅ Password valid - generating token');
 
       // Generate token with role
       const token = jwt.sign(
