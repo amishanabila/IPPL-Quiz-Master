@@ -84,56 +84,38 @@ const quizController = {
 
       console.log('🔍 Searching for PIN:', pin);
 
-      let result;
+      // Raw SQL query to validate PIN
+      const query = `SELECT kumpulan_soal_id, judul, kategori_id, materi_id, pin_code, 
+                     waktu_per_soal, waktu_keseluruhan, tipe_waktu, created_by 
+                     FROM kumpulan_soal WHERE pin_code = ? LIMIT 1`;
+      const [rows] = await db.query(query, [pin]);
       
-      try {
-        // Try stored procedure first
-        const [kumpulanSoal] = await db.query(
-          'CALL sp_peserta_validate_pin(?)',
-          [pin]
+      let result;
+      if (!rows || rows.length === 0) {
+        result = [];
+      } else {
+        const ks = rows[0];
+            
+        // Count soal
+        const [countResult] = await db.query(
+          'SELECT COUNT(*) as cnt FROM soal WHERE kumpulan_soal_id = ?',
+          [ks.kumpulan_soal_id]
         );
-        result = kumpulanSoal[0];
-      } catch (spError) {
-        console.warn('⚠️  Stored procedure error, using fallback query:', spError.message);
         
-        try {
-          // Fallback: just fetch from kumpulan_soal directly
-          // Note: column names are kumpulan_soal_id (PK) and pin_code (not pin)
-          const query = `SELECT kumpulan_soal_id, judul, kategori_id, materi_id, pin_code, 
-                         waktu_per_soal, waktu_keseluruhan, tipe_waktu, created_by 
-                         FROM kumpulan_soal WHERE pin_code = ? LIMIT 1`;
-          const [rows] = await db.query(query, [pin]);
-          
-          if (!rows || rows.length === 0) {
-            result = [];
-          } else {
-            const ks = rows[0];
-            
-            // Count soal
-            const [countResult] = await db.query(
-              'SELECT COUNT(*) as cnt FROM soal WHERE kumpulan_soal_id = ?',
-              [ks.kumpulan_soal_id]
-            );
-            
-            const jumlahSoal = countResult && countResult.length > 0 ? countResult[0].cnt : 0;
-            
-            result = [{
-              kumpulan_soal_id: ks.kumpulan_soal_id,
-              judul: ks.judul,
-              kategori: null,
-              materi: null,
-              jumlah_soal: jumlahSoal,
-              waktu_per_soal: ks.waktu_per_soal || 0,
-              waktu_keseluruhan: ks.waktu_keseluruhan || 0,
-              tipe_waktu: ks.tipe_waktu || 'per_soal',
-              created_by: ks.created_by,
-              pin_code: ks.pin_code
-            }];
-          }
-        } catch (fallbackError) {
-          console.error('❌ Fallback query failed:', fallbackError.message);
-          result = [];
-        }
+        const jumlahSoal = countResult && countResult.length > 0 ? countResult[0].cnt : 0;
+        
+        result = [{
+          kumpulan_soal_id: ks.kumpulan_soal_id,
+          judul: ks.judul,
+          kategori: null,
+          materi: null,
+          jumlah_soal: jumlahSoal,
+          waktu_per_soal: ks.waktu_per_soal || 0,
+          waktu_keseluruhan: ks.waktu_keseluruhan || 0,
+          tipe_waktu: ks.tipe_waktu || 'per_soal',
+          created_by: ks.created_by,
+          pin_code: ks.pin_code
+        }];
       }
 
       console.log('📦 Found kumpulan_soal:', result.length);
@@ -220,17 +202,16 @@ const quizController = {
         sessionData = existingSession[0];
         const existingWaktuBatas = new Date(sessionData.waktu_batas);
         
-        // Jika session tidak aktif atau waktu habis, buat session baru dengan menghapus constraint lama
+        // Jika session tidak aktif atau waktu habis, hapus session lama agar bisa buat baru
         if (!sessionData.is_active || serverTime > existingWaktuBatas) {
-          // Mark old session as inactive
+          // Delete old session completely to avoid unique constraint issue
           await connection.query(
-            'UPDATE quiz_session SET is_active = FALSE, waktu_selesai = ? WHERE session_id = ?',
-            [serverTime, sessionData.session_id]
+            'DELETE FROM quiz_session WHERE session_id = ?',
+            [sessionData.session_id]
           );
           
-          // Hapus constraint unique_session untuk user ini agar bisa buat session baru
-          // dengan cara menandai session lama sebagai selesai (sudah dilakukan di atas)
-          // Sekarang flow akan lanjut ke bawah untuk create session baru
+          // Flow will continue to create new session below
+          console.log('🗑️  Old session deleted, creating new session');
         } else {
           // Session masih aktif dan valid, return data yang ada
           const sisaWaktu = Math.floor((existingWaktuBatas - serverTime) / 1000); // dalam detik
@@ -549,15 +530,15 @@ const quizController = {
           }
         }
 
-        // Insert hasil quiz menggunakan stored procedure
-        const [resultData] = await connection.query(
-          'CALL sp_peserta_submit_result(?, ?, ?, ?, ?, ?, ?, ?)',
-          [session_id || null, nama_peserta, kumpulan_soal_id, skor, jawaban_benar, total_soal, waktu_pengerjaan, pin_code]
+        // Insert hasil quiz langsung tanpa stored procedure
+        const [insertResult] = await connection.query(
+          `INSERT INTO hasil_quiz 
+           (session_id, nama_peserta, kumpulan_soal_id, skor, jawaban_benar, total_soal, waktu_pengerjaan, pin_code, completed_at) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+          [session_id || null, nama_peserta, kumpulan_soal_id, skor, jawaban_benar, total_soal, waktu_pengerjaan || 0, pin_code]
         );
 
-        // Result dari CALL adalah array of arrays
-        const hasilData = resultData[0][0];
-        const hasil_id = hasilData.hasil_id;
+        const hasil_id = insertResult.insertId;
 
         console.log('✅ Quiz result saved to database:', {
           hasil_id,

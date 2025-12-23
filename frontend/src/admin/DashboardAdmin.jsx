@@ -6,7 +6,7 @@ import Footer from '../footer/Footer';
 import { Users, FileText, BarChart3, Download, Database, AlertCircle, TrendingUp, Clock } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://ippl-quiz-master-production.up.railway.app/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 function DashboardAdmin() {
   const navigate = useNavigate();
@@ -586,7 +586,7 @@ function DashboardAdmin() {
               <TrendingUp className="h-5 w-5 text-green-500" />
             </div>
             <h3 className="text-gray-600 text-sm font-medium mb-1">Quiz Selesai</h3>
-            <p className="text-3xl font-bold text-gray-900">{stats?.overview?.total_quiz_completed || 0}</p>
+            <p className="text-3xl font-bold text-gray-900">{stats?.overview?.total_quiz_selesai || stats?.overview?.total_quiz_completed || 0}</p>
           </div>
         </div>
 
@@ -604,7 +604,7 @@ function DashboardAdmin() {
           
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
             <h3 className="text-gray-600 text-sm font-medium mb-2">Peserta</h3>
-            <p className="text-2xl font-bold text-gray-900">{stats?.overview?.total_unique_peserta || 0}</p>
+            <p className="text-2xl font-bold text-gray-900">{stats?.overview?.total_unique_peserta || stats?.overview?.total_peserta || 0}</p>
           </div>
         </div>
 

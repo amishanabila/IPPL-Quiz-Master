@@ -305,10 +305,12 @@ export const apiService = {
   },
 
   async resetLeaderboard() {
+    const token = localStorage.getItem('token');
     const response = await fetch(`${BASE_URL}/leaderboard/reset`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
       },
     });
     return await response.json();

@@ -7,85 +7,69 @@ exports.getLeaderboard = async (req, res) => {
     
     console.log('📊 getLeaderboard called with filters:', { kategori_id, materi_id, kumpulan_soal_id });
 
-    let results = [];
-
-    try {
-      // Try stored procedure first
-      let data;
-      
-      if (kategori_id) {
-        // Filter by kategori
-        [data] = await db.query(
-          'CALL sp_peserta_get_leaderboard_by_kategori(?, 100)',
-          [kategori_id]
-        );
-        results = data[0] || [];
-      } else if (kumpulan_soal_id) {
-        // Filter by kumpulan_soal
-        [data] = await db.query(
-          'CALL sp_peserta_get_leaderboard(?, 100)',
-          [kumpulan_soal_id]
-        );
-        results = data[0] || [];
-      } else {
-        // Get all leaderboard
-        [data] = await db.query(
-          'CALL sp_peserta_get_leaderboard(NULL, 100)'
-        );
-        results = data[0] || [];
-      }
-    } catch (spError) {
-      console.warn('⚠️  Stored procedure error, using fallback query:', spError.message);
-      
-      // Fallback to simple raw SQL query
-      try {
-        let query = `
-          SELECT 
-            u.id as peserta_id,
-            u.nama as nama_peserta,
-            u.email,
-            COUNT(ua.id) as jumlah_jawaban,
-            SUM(CASE WHEN ua.is_benar = 1 THEN 1 ELSE 0 END) as jumlah_benar
-          FROM users u
-          LEFT JOIN user_answers ua ON u.id = ua.peserta_id
-          WHERE u.role = 'peserta' OR u.role IS NULL
-          GROUP BY u.id, u.nama, u.email
-          ORDER BY jumlah_benar DESC, jumlah_jawaban DESC
-          LIMIT 100
-        `;
-        
-        const [rows] = await db.query(query);
-        results = rows || [];
-        
-        // Calculate percentage untuk setiap row
-        results = results.map(r => ({
-          ...r,
-          skor_persen: r.jumlah_jawaban > 0 ? Math.round((r.jumlah_benar / r.jumlah_jawaban) * 100) : 0,
-          skor: r.jumlah_benar || 0
-        }));
-        
-        console.log('✅ Fallback query succeeded, got', results.length, 'results');
-      } catch (fallbackError) {
-        console.error('❌ Fallback query also failed:', fallbackError.message);
-        results = [];
-      }
+    // Raw SQL query with filters
+    let query = `
+      SELECT 
+        hq.nama_peserta,
+        SUM(hq.jawaban_benar) as jumlah_benar,
+        SUM(hq.total_soal) as jumlah_jawaban,
+        AVG(hq.skor) as rata_rata_skor,
+        AVG(hq.waktu_pengerjaan) as rata_waktu,
+        COUNT(DISTINCT hq.hasil_id) as total_quiz_diikuti,
+        ks.materi_id,
+        ks.kategori_id
+      FROM hasil_quiz hq
+      JOIN kumpulan_soal ks ON hq.kumpulan_soal_id = ks.kumpulan_soal_id
+      WHERE hq.completed_at IS NOT NULL
+    `;
+    
+    const params = [];
+    
+    // Filter by kategori_id
+    if (kategori_id) {
+      query += ' AND ks.kategori_id = ?';
+      params.push(kategori_id);
     }
-
-    // Filter by materi jika diperlukan (post-filter)
-    if (materi_id && results.length > 0) {
-      console.log('🔍 Filtering by materi_id:', materi_id);
-      console.log('📊 Before filter:', results.length, 'entries');
-      results = results.filter(r => {
-        return r.materi_id == materi_id;
-      });
-      console.log('📊 After filter:', results.length, 'entries');
+    
+    // Filter by materi_id
+    if (materi_id) {
+      query += ' AND ks.materi_id = ?';
+      params.push(materi_id);
     }
+    
+    // Filter by kumpulan_soal_id
+    if (kumpulan_soal_id) {
+      query += ' AND hq.kumpulan_soal_id = ?';
+      params.push(kumpulan_soal_id);
+    }
+    
+    query += `
+      GROUP BY hq.nama_peserta, ks.materi_id, ks.kategori_id
+      ORDER BY jumlah_benar DESC, rata_rata_skor DESC
+      LIMIT 100
+    `;
+    
+    const [rows] = await db.query(query, params);
+    const results = rows || [];
+    
+    // Format data untuk match frontend expectations
+    const formattedResults = results.map(r => ({
+      nama_peserta: r.nama_peserta,
+      skor: Math.round(r.rata_rata_skor || 0),
+      jawaban_benar: r.jumlah_benar || 0,
+      total_soal: r.jumlah_jawaban || 0,
+      waktu_pengerjaan: Math.round(r.rata_waktu || 0),
+      skor_persen: r.jumlah_jawaban > 0 ? Math.round((r.jumlah_benar / r.jumlah_jawaban) * 100) : 0,
+      total_quiz_diikuti: r.total_quiz_diikuti || 0,
+      materi_id: r.materi_id,
+      kategori_id: r.kategori_id
+    }));
 
-    console.log('✅ Found', results.length, 'leaderboard entries');
+    console.log('✅ Found', formattedResults.length, 'leaderboard entries');
 
     res.json({
       status: 'success',
-      data: results,
+      data: formattedResults,
       filters: {
         kategori_id: kategori_id || null,
         materi_id: materi_id || null,
@@ -195,6 +179,124 @@ exports.resetLeaderboard = async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Terjadi kesalahan saat mereset leaderboard'
+    });
+  }
+};
+
+// Reset leaderboard untuk kumpulan soal tertentu (kreator only)
+exports.resetLeaderboardByKumpulanSoal = async (req, res) => {
+  try {
+    const { kumpulan_soal_id } = req.params;
+    const userId = req.user.userId || req.user.id;
+
+    // Verify kreator owns this kumpulan_soal
+    const [kumpulanSoal] = await db.query(
+      'SELECT created_by FROM kumpulan_soal WHERE kumpulan_soal_id = ?',
+      [kumpulan_soal_id]
+    );
+
+    if (kumpulanSoal.length === 0) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Kumpulan soal tidak ditemukan'
+      });
+    }
+
+    if (kumpulanSoal[0].created_by !== userId) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Anda tidak memiliki akses untuk reset leaderboard ini'
+      });
+    }
+
+    // Delete quiz_session (akan cascade delete hasil_quiz & user_answers)
+    const [deleteResult] = await db.query(
+      'DELETE FROM quiz_session WHERE kumpulan_soal_id = ?',
+      [kumpulan_soal_id]
+    );
+
+    res.json({
+      status: 'success',
+      message: `Leaderboard berhasil direset. ${deleteResult.affectedRows} session dihapus.`,
+      data: {
+        sessions_deleted: deleteResult.affectedRows
+      }
+    });
+  } catch (error) {
+    console.error('Error resetting leaderboard:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Terjadi kesalahan saat reset leaderboard'
+    });
+  }
+};
+
+// Get quiz sessions dengan info lengkap untuk admin/kreator
+exports.getQuizSessions = async (req, res) => {
+  try {
+    const { kumpulan_soal_id, created_by } = req.query;
+    const userRole = req.user.role;
+    const userId = req.user.userId || req.user.id;
+
+    let query = `
+      SELECT 
+        qs.session_id,
+        qs.nama_peserta,
+        qs.email_peserta,
+        qs.kumpulan_soal_id,
+        ks.judul as kumpulan_soal_judul,
+        ks.pin_code,
+        qs.waktu_mulai,
+        qs.waktu_selesai,
+        qs.waktu_batas,
+        qs.is_active,
+        hq.hasil_id,
+        hq.skor,
+        hq.jawaban_benar,
+        hq.total_soal,
+        hq.completed_at,
+        u.nama as nama_kreator,
+        u.email as email_kreator
+      FROM quiz_session qs
+      LEFT JOIN kumpulan_soal ks ON qs.kumpulan_soal_id = ks.kumpulan_soal_id
+      LEFT JOIN hasil_quiz hq ON qs.session_id = hq.session_id
+      LEFT JOIN users u ON ks.created_by = u.id
+      WHERE 1=1
+    `;
+
+    const params = [];
+
+    // Filter by kumpulan_soal_id
+    if (kumpulan_soal_id) {
+      query += ' AND qs.kumpulan_soal_id = ?';
+      params.push(kumpulan_soal_id);
+    }
+
+    // Kreator only see their own data
+    if (userRole === 'kreator') {
+      query += ' AND ks.created_by = ?';
+      params.push(userId);
+    }
+
+    // Admin can filter by creator
+    if (userRole === 'admin' && created_by) {
+      query += ' AND ks.created_by = ?';
+      params.push(created_by);
+    }
+
+    query += ' ORDER BY qs.created_at DESC LIMIT 100';
+
+    const [sessions] = await db.query(query, params);
+
+    res.json({
+      status: 'success',
+      data: sessions
+    });
+  } catch (error) {
+    console.error('Error fetching quiz sessions:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Terjadi kesalahan saat mengambil data quiz session'
     });
   }
 };

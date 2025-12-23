@@ -4,7 +4,7 @@ import HeaderAdmin from '../header/HeaderAdmin';
 import Footer from '../footer/Footer';
 import { ArrowLeft, Users, Edit2, Trash2, Search } from 'lucide-react';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 function KelolaUsers() {
   const navigate = useNavigate();
@@ -35,28 +35,61 @@ function KelolaUsers() {
       setLoading(true);
       const token = localStorage.getItem('authToken');
       
+      if (!token) {
+        console.warn('⚠️ No auth token found');
+        alert('Sesi anda telah berakhir, silakan login kembali');
+        navigate('/admin');
+        return;
+      }
+      
       console.log('🔑 Loading users with token:', token ? 'Token exists' : 'No token');
       
-      const response = await fetch(`${API_BASE_URL}/admin/users`, {
+      const apiUrl = `${API_BASE_URL}/admin/users`;
+      console.log('🌐 Fetching from:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
+        method: 'GET',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
 
       console.log('📊 Users response status:', response.status);
+      console.log('📊 Users response headers:', response.headers);
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log('✅ Users data loaded:', data);
-        setUsers(data.data || []);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Response not OK:', response.status, errorText);
+        
+        try {
+          const errorData = JSON.parse(errorText);
+          console.error('❌ Users load error:', errorData);
+          alert(`Gagal memuat data users (${response.status}): ${errorData.message || 'Unknown error'}`);
+        } catch (e) {
+          console.error('❌ Error parsing response:', errorText);
+          alert(`Gagal memuat data users: ${response.statusText}`);
+        }
+        return;
+      }
+
+      const data = await response.json();
+      console.log('✅ Users data loaded:', data);
+      
+      if (data.success && Array.isArray(data.data)) {
+        setUsers(data.data);
+        console.log(`✅ Set ${data.data.length} users`);
+      } else if (Array.isArray(data)) {
+        setUsers(data);
+        console.log(`✅ Set ${data.length} users (direct array)`);
       } else {
-        const errorData = await response.json();
-        console.error('❌ Users load error:', errorData);
-        alert(`Gagal memuat data users: ${errorData.message || 'Unknown error'}`);
+        console.warn('⚠️ Unexpected response structure:', data);
+        setUsers([]);
       }
     } catch (error) {
-      console.error('Error loading users:', error);
-      alert('Terjadi kesalahan saat memuat data users');
+      console.error('❌ Error loading users:', error);
+      console.error('❌ Error stack:', error.stack);
+      alert(`Terjadi kesalahan saat memuat data users: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -155,7 +188,11 @@ function KelolaUsers() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 font-medium">Memuat data users...</p>
+          <p className="text-sm text-gray-400 mt-2">Menghubungkan ke backend...</p>
+        </div>
       </div>
     );
   }

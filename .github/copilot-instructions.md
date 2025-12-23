@@ -78,7 +78,7 @@ File: [frontend/src/components/ProtectedRoute.jsx](frontend/src/components/Prote
 All API calls through `apiService` singleton with centralized error handling:
 ```javascript
 // frontend/src/services/api.js
-const BASE_URL = import.meta.env.VITE_API_URL || 'https://ippl-quiz-master-production.up.railway.app/api';
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 ```
 - Uses `fetch()` with automatic token injection from localStorage
 - All responses expected as JSON with `{ status, message, data }`
