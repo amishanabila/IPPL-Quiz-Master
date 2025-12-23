@@ -1,9 +1,21 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 const dotenv = require('dotenv');
+const db = require('./src/config/db');
 
-// Load environment variables
-dotenv.config();
+// Load .env.local first (development), then .env (production)
+const envLocalPath = path.join(__dirname, '.env.local');
+const envPath = path.join(__dirname, '.env');
+
+if (fs.existsSync(envLocalPath)) {
+    dotenv.config({ path: envLocalPath });
+    console.log('[Server] Loaded .env.local (development)');
+} else if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    console.log('[Server] Loaded .env (production)');
+}
 
 // Import route handlers
 const authRoutes = require('./src/routes/authRoutes');
@@ -17,8 +29,52 @@ const adminRoutes = require('./src/routes/adminRoutes');
 
 const app = express();
 
+// Health check endpoint (first thing before CORS)
+app.get('/health', async (req, res) => {
+    try {
+        const [result] = await db.query('SELECT 1');
+        res.json({
+            status: 'ok',
+            database: 'connected',
+            timestamp: new Date().toISOString(),
+            environment: process.env.NODE_ENV || 'development',
+            uptime: process.uptime()
+        });
+    } catch (error) {
+        console.error('[Health Check] Database error:', error.message);
+        res.status(503).json({
+            status: 'error',
+            database: 'disconnected',
+            message: error.message.substring(0, 100),
+            timestamp: new Date().toISOString(),
+            environment: process.env.NODE_ENV || 'development'
+        });
+    }
+});
+
+// CORS Configuration
+const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    process.env.FRONTEND_URL,
+    process.env.CORS_ORIGIN
+].filter(Boolean);
+
+app.use(cors({
+    origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl requests)
+        if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
+}));
+
 // Middlewares
-app.use(cors());
 // Increase payload limit to 50MB for base64 images
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));

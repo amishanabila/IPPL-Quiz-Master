@@ -1,7 +1,7 @@
 // src/pages/BuatSoal.jsx
 import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import FormBuatSoal from "../Buat Soal/FormBuatSoal";
+import FormBuatSoal from "../buatsoal/FormBuatSoal";
 import Footer from "../footer/Footer";
 import { Loader2 } from "lucide-react"; // Loader icon
 import { apiService } from "../services/api";

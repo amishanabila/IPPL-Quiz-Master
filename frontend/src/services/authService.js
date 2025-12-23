@@ -1,5 +1,5 @@
 // Constants
-const BASE_URL = 'http://localhost:5000/api';
+const BASE_URL = import.meta.env.VITE_API_URL || 'https://ippl-quiz-master-production.up.railway.app/api';
 const AUTH_TOKEN_KEY = 'authToken';
 const USER_DATA_KEY = 'userData';
 

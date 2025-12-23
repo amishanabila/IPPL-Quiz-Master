@@ -20,7 +20,7 @@ import LoginAdmin from "./auth/LoginAdmin.jsx";
 import KumpulanMateri from "./materi/KumpulanMateri.jsx";
 import Soal from "./soal/Soal.jsx";
 import LihatSoal from "./soal/LihatSoal.jsx";
-import BuatSoal from "./Buat Soal/BuatSoal.jsx";       
+import BuatSoal from "./buatsoal/BuatSoal.jsx";       
 import HasilAkhir from "./hasil akhir/HasilAkhir.jsx";
 import Leaderboard from "./leaderboard/Leaderboard.jsx";
 import DashboardAdmin from "./admin/DashboardAdmin.jsx";
