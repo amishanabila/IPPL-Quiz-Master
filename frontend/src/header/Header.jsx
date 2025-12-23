@@ -47,6 +47,17 @@ export default function Header() {
         }
       } catch (err) {
         console.error("Header - Failed to fetch profile:", err);
+        
+        // If token is invalid (401), auto-logout
+        if (err.message && err.message.includes('401')) {
+          console.log("Header - Token invalid, logging out");
+          authService.logout();
+          if (mounted) {
+            setUser(null);
+          }
+          return;
+        }
+        
         // Fallback to localStorage
         const local = authService.getCurrentUser();
         if (local && mounted) {

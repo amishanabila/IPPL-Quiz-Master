@@ -172,6 +172,9 @@ export const authService = {
       
       if (!res.ok) {
         const errorText = await res.text();
+        if (res.status === 401) {
+          throw new Error(`401 - Token is not valid`);
+        }
         throw new Error(`HTTP Error: ${res.status} ${res.statusText} - ${errorText}`);
       }
       
