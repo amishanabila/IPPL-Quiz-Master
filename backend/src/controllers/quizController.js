@@ -84,14 +84,57 @@ const quizController = {
 
       console.log('🔍 Searching for PIN:', pin);
 
-      // Cari kumpulan_soal berdasarkan PIN menggunakan stored procedure
-      const [kumpulanSoal] = await db.query(
-        'CALL sp_peserta_validate_pin(?)',
-        [pin]
-      );
-
-      // Result dari CALL adalah array of arrays, ambil yang pertama
-      const result = kumpulanSoal[0];
+      let result;
+      
+      try {
+        // Try stored procedure first
+        const [kumpulanSoal] = await db.query(
+          'CALL sp_peserta_validate_pin(?)',
+          [pin]
+        );
+        result = kumpulanSoal[0];
+      } catch (spError) {
+        console.warn('⚠️  Stored procedure error, using fallback query:', spError.message);
+        
+        try {
+          // Fallback: just fetch from kumpulan_soal directly
+          // Note: column names are kumpulan_soal_id (PK) and pin_code (not pin)
+          const query = `SELECT kumpulan_soal_id, judul, kategori_id, materi_id, pin_code, 
+                         waktu_per_soal, waktu_keseluruhan, tipe_waktu, created_by 
+                         FROM kumpulan_soal WHERE pin_code = ? LIMIT 1`;
+          const [rows] = await db.query(query, [pin]);
+          
+          if (!rows || rows.length === 0) {
+            result = [];
+          } else {
+            const ks = rows[0];
+            
+            // Count soal
+            const [countResult] = await db.query(
+              'SELECT COUNT(*) as cnt FROM soal WHERE kumpulan_soal_id = ?',
+              [ks.kumpulan_soal_id]
+            );
+            
+            const jumlahSoal = countResult && countResult.length > 0 ? countResult[0].cnt : 0;
+            
+            result = [{
+              kumpulan_soal_id: ks.kumpulan_soal_id,
+              judul: ks.judul,
+              kategori: null,
+              materi: null,
+              jumlah_soal: jumlahSoal,
+              waktu_per_soal: ks.waktu_per_soal || 0,
+              waktu_keseluruhan: ks.waktu_keseluruhan || 0,
+              tipe_waktu: ks.tipe_waktu || 'per_soal',
+              created_by: ks.created_by,
+              pin_code: ks.pin_code
+            }];
+          }
+        } catch (fallbackError) {
+          console.error('❌ Fallback query failed:', fallbackError.message);
+          result = [];
+        }
+      }
 
       console.log('📦 Found kumpulan_soal:', result.length);
 
@@ -107,7 +150,7 @@ const quizController = {
       console.log('✅ Kumpulan soal found:', ks.kumpulan_soal_id, '- Jumlah soal:', ks.jumlah_soal);
 
       // Cek apakah ada soal di kumpulan ini
-      if (ks.jumlah_soal === 0) {
+      if (ks.jumlah_soal === 0 || ks.jumlah_soal === null) {
         console.log('⚠️ No soal in this kumpulan');
         return res.status(400).json({
           status: 'error',

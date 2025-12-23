@@ -322,6 +322,53 @@ const authController = {
         message: 'Terjadi kesalahan saat reset password'
       });
     }
+  },
+
+  // Create admin account (helper endpoint for development)
+  async createAdmin(req, res) {
+    try {
+      const { email = 'admin@gmail.com', password = 'Admin123!' } = req.body;
+
+      // Check if admin already exists
+      const [existingAdmin] = await db.query(
+        'SELECT id FROM users WHERE email = ? LIMIT 1',
+        [email]
+      );
+
+      if (existingAdmin && existingAdmin.length > 0) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Admin account sudah ada'
+        });
+      }
+
+      // Hash password
+      const salt = await bcryptjs.genSalt(10);
+      const hashedPassword = await bcryptjs.hash(password, salt);
+
+      // Insert admin
+      const [result] = await db.query(
+        'INSERT INTO users (nama, email, password, role, is_verified) VALUES (?, ?, ?, ?, ?)',
+        ['Administrator', email, hashedPassword, 'admin', true]
+      );
+
+      res.status(201).json({
+        status: 'success',
+        message: 'Admin account berhasil dibuat',
+        data: {
+          id: result.insertId,
+          email: email,
+          password: password,
+          role: 'admin'
+        }
+      });
+    } catch (error) {
+      console.error('Create admin error:', error);
+      res.status(500).json({
+        status: 'error',
+        message: 'Terjadi kesalahan saat membuat admin account'
+      });
+    }
   }
 };
 

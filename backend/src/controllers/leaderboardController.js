@@ -7,37 +7,75 @@ exports.getLeaderboard = async (req, res) => {
     
     console.log('📊 getLeaderboard called with filters:', { kategori_id, materi_id, kumpulan_soal_id });
 
-    let results;
+    let results = [];
 
-    // Gunakan stored procedure sesuai filter
-    if (kategori_id) {
-      // Filter by kategori
-      const [data] = await db.query(
-        'CALL sp_peserta_get_leaderboard_by_kategori(?, 100)',
-        [kategori_id]
-      );
-      results = data[0];
-    } else if (kumpulan_soal_id) {
-      // Filter by kumpulan_soal
-      const [data] = await db.query(
-        'CALL sp_peserta_get_leaderboard(?, 100)',
-        [kumpulan_soal_id]
-      );
-      results = data[0];
-    } else {
-      // Get all leaderboard
-      const [data] = await db.query(
-        'CALL sp_peserta_get_leaderboard(NULL, 100)'
-      );
-      results = data[0];
+    try {
+      // Try stored procedure first
+      let data;
+      
+      if (kategori_id) {
+        // Filter by kategori
+        [data] = await db.query(
+          'CALL sp_peserta_get_leaderboard_by_kategori(?, 100)',
+          [kategori_id]
+        );
+        results = data[0] || [];
+      } else if (kumpulan_soal_id) {
+        // Filter by kumpulan_soal
+        [data] = await db.query(
+          'CALL sp_peserta_get_leaderboard(?, 100)',
+          [kumpulan_soal_id]
+        );
+        results = data[0] || [];
+      } else {
+        // Get all leaderboard
+        [data] = await db.query(
+          'CALL sp_peserta_get_leaderboard(NULL, 100)'
+        );
+        results = data[0] || [];
+      }
+    } catch (spError) {
+      console.warn('⚠️  Stored procedure error, using fallback query:', spError.message);
+      
+      // Fallback to simple raw SQL query
+      try {
+        let query = `
+          SELECT 
+            u.id as peserta_id,
+            u.nama as nama_peserta,
+            u.email,
+            COUNT(ua.id) as jumlah_jawaban,
+            SUM(CASE WHEN ua.is_benar = 1 THEN 1 ELSE 0 END) as jumlah_benar
+          FROM users u
+          LEFT JOIN user_answers ua ON u.id = ua.peserta_id
+          WHERE u.role = 'peserta' OR u.role IS NULL
+          GROUP BY u.id, u.nama, u.email
+          ORDER BY jumlah_benar DESC, jumlah_jawaban DESC
+          LIMIT 100
+        `;
+        
+        const [rows] = await db.query(query);
+        results = rows || [];
+        
+        // Calculate percentage untuk setiap row
+        results = results.map(r => ({
+          ...r,
+          skor_persen: r.jumlah_jawaban > 0 ? Math.round((r.jumlah_benar / r.jumlah_jawaban) * 100) : 0,
+          skor: r.jumlah_benar || 0
+        }));
+        
+        console.log('✅ Fallback query succeeded, got', results.length, 'results');
+      } catch (fallbackError) {
+        console.error('❌ Fallback query also failed:', fallbackError.message);
+        results = [];
+      }
     }
 
-    // Filter by materi jika diperlukan (post-filter karena tidak ada SP khusus)
-    if (materi_id && results) {
+    // Filter by materi jika diperlukan (post-filter)
+    if (materi_id && results.length > 0) {
       console.log('🔍 Filtering by materi_id:', materi_id);
       console.log('📊 Before filter:', results.length, 'entries');
       results = results.filter(r => {
-        console.log('  - Entry:', r.nama_peserta, 'materi_id:', r.materi_id, 'matches?', r.materi_id == materi_id);
         return r.materi_id == materi_id;
       });
       console.log('📊 After filter:', results.length, 'entries');
